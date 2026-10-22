@@ -1,0 +1,43 @@
+# Builds Desktop Cat for Windows, macOS and Linux on their native runners.
+# Push a tag like v1.0.0 (or run it manually) and download the installers
+# from the workflow run's "Artifacts" section.
+name: build
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            cmd: npx electron-builder --win --publish never
+          - os: macos-latest
+            cmd: npx electron-builder --mac --publish never
+          - os: ubuntu-latest
+            cmd: npx electron-builder --linux --publish never
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install
+      - run: npm test
+      - run: ${{ matrix.cmd }}
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-cat-${{ matrix.os }}
+          path: |
+            dist/*.exe
+            dist/*.dmg
+            dist/*.zip
+            dist/*.AppImage
+            dist/*.deb
+          if-no-files-found: error

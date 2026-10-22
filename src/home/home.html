@@ -1,0 +1,94 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;">
+<title>Cat Home</title>
+<link rel="stylesheet" href="home.css">
+</head>
+<body>
+<div class="titlebar"></div>
+<header class="hero">
+  <canvas id="portrait" width="300" height="190"></canvas>
+  <div class="who">
+    <input id="name" class="name" maxlength="24" spellcheck="false" title="Click to rename">
+    <div class="sub"><span id="age"></span> · <span id="mood" class="chip"></span></div>
+  </div>
+</header>
+<nav class="tabs">
+  <button data-tab="cat" class="on">Care</button>
+  <button data-tab="settings">Settings</button>
+  <button data-tab="memories">Memories</button>
+  <button data-tab="help">How to play</button>
+</nav>
+<main>
+  <section id="tab-cat" class="tab on">
+    <div id="needs" class="needs"></div>
+    <h3>Quick care</h3>
+    <div class="grid" id="quick"></div>
+    <h3>Life together</h3>
+    <div class="stats" id="stats"></div>
+    <div class="actions">
+      <button id="hideBtn" class="btn small ghost">Hide cat</button>
+      <button id="quitBtn" class="btn small warn">Quit Desktop Cat</button>
+    </div>
+  </section>
+
+  <section id="tab-settings" class="tab">
+    <div class="card">
+      <label class="row"><span>Fur</span><span class="swatches" id="fur"></span></label>
+      <label class="row"><span>Eyes</span><span class="swatches" id="eyes"></span></label>
+      <label class="row"><span>Size</span><select data-k="size"><option value="tiny">Tiny</option><option value="small">Small</option><option value="medium">Medium</option><option value="large">Large</option></select></label>
+    </div>
+    <div class="card">
+      <label class="row"><span>Time speed<small>How fast needs change. Turbo is for trying things out.</small></span>
+        <select data-k="timeSpeed"><option value="relaxed">Relaxed (½×)</option><option value="normal">Normal</option><option value="fast">Fast (4×)</option><option value="turbo">Turbo (25×)</option></select></label>
+      <label class="row"><span>Mischief<small>Scratching the screen &amp; playing with files.</small></span>
+        <select data-k="mischief"><option value="off">Off — angel cat</option><option value="low">Low</option><option value="normal">Normal</option><option value="high">High — chaos</option></select></label>
+    </div>
+    <div class="card">
+      <label class="row"><span>Open menu with<small id="hookInfo"></small></span>
+        <select data-k="rightClick"><option value="anywhere">Right-click anywhere</option><option value="alt">Alt/⌥ + right-click anywhere</option><option value="cat">Right-click on the cat only</option></select></label>
+      <div class="row" id="hookRow"><span>Global right-click<small id="hookStatus"></small></span><button id="hookBtn" class="btn small">Enable…</button></div>
+    </div>
+    <div class="card">
+      <label class="row"><span>Sounds</span><input type="checkbox" data-k="sound" class="toggle"></label>
+      <label class="row"><span>Volume</span><input type="range" min="0" max="1" step="0.05" data-k="volume"></label>
+      <label class="row"><span>Notifications<small>When the cat is very hungry, weak or exhausted.</small></span><input type="checkbox" data-k="notifications" class="toggle"></label>
+      <label class="row"><span>Thought bubbles</span><input type="checkbox" data-k="bubbles" class="toggle"></label>
+      <label class="row"><span>Use my Desktop file names<small>The cat plays with pretend copies named after items on your Desktop. Only names are read — your files are never touched.</small></span><input type="checkbox" data-k="realFiles" class="toggle"></label>
+      <label class="row"><span>Start when I log in</span><input type="checkbox" data-k="launchAtLogin" class="toggle"></label>
+    </div>
+    <div class="card danger">
+      <div class="row"><span>Start over<small>Rehome this cat and adopt a new kitten.</small></span><button id="reset" class="btn small warn">Adopt new kitten</button></div>
+    </div>
+  </section>
+
+  <section id="tab-memories" class="tab">
+    <p class="muted" id="memEmpty">No memories yet. Take good care of your kitty!</p>
+    <div id="memorial"></div>
+  </section>
+
+  <section id="tab-help" class="tab help">
+    <div class="card">
+      <h4>🖱️ The menu</h4>
+      <p>Right-click anywhere (or right-click the cat) to open the care menu. You can also use the tray / menu-bar icon or <b id="sc"></b>.</p>
+      <h4>✋ Pick up the cat</h4>
+      <p>Drag the cat — you'll carry it by the scruff like a mother cat. Drop it anywhere, even on another monitor. Shake it too much and it gets dizzy!</p>
+      <h4>💗 Pet</h4>
+      <p>Move your mouse back and forth over the cat to stroke it. It purrs. Click to boop — but not too often…</p>
+      <h4>🍽️ Needs</h4>
+      <p>Watch the thought bubbles: 🐟 hungry, 🌙 sleepy, 💩 needs a clean-up, 🧶 bored, ➕ sick. If it starves for too long, it will pass away.</p>
+      <h4>🧹 Clean &amp; fix</h4>
+      <p>Choose <i>Clean up → Scoop poop</i> and click each poop. <i>Fix the screen</i> repairs claw marks and tidies files the cat dragged around. A scratching post saves your screen.</p>
+      <h4>🐭 Play</h4>
+      <p>Mouse chase turns your cursor into a mouse the cat hunts — hold still and it might catch you! Also try the laser, yarn (drag &amp; throw it), a box, catnip and the brush.</p>
+      <h4>🤫 Working?</h4>
+      <p>Quiet time makes the cat nap in a corner without needs or mess. Hide cat removes it completely (bring it back from the tray icon).</p>
+    </div>
+  </section>
+</main>
+<script src="../renderer/catArt.js"></script>
+<script src="home.js"></script>
+</body>
+</html>
