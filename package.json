@@ -1,7 +1,7 @@
 {
   "name": "desktop-buddies",
   "productName": "Desktop Buddies",
-  "version": "2.1.1",
+  "version": "2.1.2",
   "description": "Desktop companions — a little white cat and an armored hero — that live on your screen.",
   "main": "src/main/main.js",
   "author": "Desktop Buddies",

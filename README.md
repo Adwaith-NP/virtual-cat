@@ -73,6 +73,11 @@ the menu → **Enable right-click anywhere…** and switch on *Desktop Buddies* 
 *Electron* when running from source) in System Settings → Privacy & Security →
 Accessibility. On Windows and Linux no permission is needed.
 
+**After installing a new version** macOS keeps showing Desktop Buddies as
+switched on, but that permission belonged to the old build and no longer works.
+Select it, remove it with **−**, then choose *Enable right-click anywhere…*
+again (or run `tccutil reset Accessibility app.desktopbuddies` first).
+
 ## Build installers
 
 ```bash

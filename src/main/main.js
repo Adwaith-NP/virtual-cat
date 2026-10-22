@@ -11,7 +11,7 @@
  */
 const {
   app, BrowserWindow, screen, ipcMain, Tray, Menu, nativeImage, Notification,
-  globalShortcut, systemPreferences, powerMonitor,
+  globalShortcut, systemPreferences, powerMonitor, dialog, shell,
 } = require('electron');
 const path = require('path');
 const fs = require('fs');
@@ -647,9 +647,31 @@ function maybeStartHook() {
   });
 }
 
-function requestHookPermission() {
+let permissionAsking = false;
+async function requestHookPermission() {
   if (!isMac) { maybeStartHook(); return; }
+  if (systemPreferences.isTrustedAccessibilityClient(false)) { maybeStartHook(); return; }
+  if (permissionAsking) return;
+  // macOS ties the permission to this exact build: after an update the old
+  // entry still shows as "on" but no longer counts, so explain how to fix that
+  permissionAsking = true;
+  app.focus({ steal: true });
+  const r = await dialog.showMessageBox({
+    type: 'info',
+    message: 'Allow right-click anywhere',
+    detail: 'macOS only lets Desktop Buddies see right-clicks outside its own windows with Accessibility permission.\n\n'
+      + '1. Click Open Settings.\n2. Switch on Desktop Buddies.\n\n'
+      + 'Already switched on but not working? That is the permission of an older version: '
+      + 'select Desktop Buddies, remove it with the − button, then choose "Enable right-click anywhere…" again.',
+    buttons: ['Open Settings', 'Cancel'],
+    defaultId: 0,
+    cancelId: 1,
+  }).catch(() => ({ response: 1 }));
+  permissionAsking = false;
+  if (r.response !== 0) return;
+  // adds the app to the list (and shows the system prompt the first time)
   if (systemPreferences.isTrustedAccessibilityClient(true)) { maybeStartHook(); return; }
+  shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility').catch(() => {});
   // poll until the user flips the switch in System Settings
   let n = 0;
   const timer = setInterval(() => {

@@ -274,7 +274,7 @@
     const hk = s.hook || {};
     $('#hookRow').style.display = s.settings.rightClick === 'cat' ? 'none' : '';
     $('#hookStatus').textContent = hk.ok ? 'Active — right-click anywhere opens the menu.'
-      : hk.reason === 'permission' ? (mac ? 'Needs Accessibility permission (System Settings → Privacy & Security → Accessibility).' : 'Not available.')
+      : hk.reason === 'permission' ? (mac ? 'Needs Accessibility permission. Press Enable and switch on Desktop Buddies. Already on? After an update macOS keeps the old version\'s permission: remove it with −, then press Enable again.' : 'Not available.')
       : hk.reason === 'unavailable' ? 'Not available on this system — right-click the character or use the tray icon.'
       : 'Not running.';
     $('#hookBtn').style.display = hk.ok ? 'none' : '';
