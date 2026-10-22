@@ -700,6 +700,8 @@ class Hero {
       // power management: land and recharge a bit when nearly empty
       if (this.power < 6) {
         this.say('POWER CRITICAL', 'warn');
+        // lower the weapons: the reactor only recharges when he isn't aiming
+        this.aim = null; this.charge = 0; this.beamK = 0;
         if (this.mode === 'air') yield* this.land();
         this.setPose('stand');
         yield* this.wait(3, () => this.power > 30);
@@ -1603,7 +1605,7 @@ class IronWorld {
       this.spawnAlly(a);
       a.called++;
       a.legionAt = t + rand(350, 650);
-    } else if (a.called >= a.legion && this.allies.length < a.legion && a.queue.length && t >= a.legionAt) {
+    } else if (a.called >= a.legion && this.allies.length < a.legion && (a.queue.length || this.enemies.length) && t >= a.legionAt) {
       // a suit went down: send a replacement
       if (this.spawnAlly(a)) this.hero.say('REINFORCEMENTS, JARVIS');
       a.legionAt = t + rand(6000, 9000);
