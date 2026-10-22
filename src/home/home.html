@@ -3,76 +3,126 @@
 <head>
 <meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;">
-<title>Cat Home</title>
+<title>Desktop Buddies</title>
 <link rel="stylesheet" href="home.css">
 </head>
-<body>
+<body data-character="cat">
 <div class="titlebar"></div>
+<div class="switcher">
+  <button class="char" data-char="cat"><canvas data-av="cat" width="64" height="64"></canvas><span><b>Cat</b><small id="catSub"></small></span></button>
+  <button class="char" data-char="ironman"><canvas data-av="ironman" width="64" height="64"></canvas><span><b>Iron Man</b><small id="ironSub"></small></span></button>
+</div>
 <header class="hero">
   <canvas id="portrait" width="300" height="190"></canvas>
   <div class="who">
-    <input id="name" class="name" maxlength="24" spellcheck="false" title="Click to rename">
-    <div class="sub"><span id="age"></span> · <span id="mood" class="chip"></span></div>
+    <input id="name" class="name only-cat" maxlength="24" spellcheck="false" title="Click to rename">
+    <div class="name only-iron">IRON MAN</div>
+    <div class="sub"><span id="age"></span><span class="dot"> · </span><span id="mood" class="chip"></span></div>
   </div>
 </header>
 <nav class="tabs">
-  <button data-tab="cat" class="on">Care</button>
+  <button data-tab="cat" class="only-cat on">Care</button>
+  <button data-tab="suit" class="only-iron">Status</button>
+  <button data-tab="reminders">Reminders</button>
   <button data-tab="settings">Settings</button>
-  <button data-tab="memories">Memories</button>
-  <button data-tab="help">How to play</button>
+  <button data-tab="memories" class="only-cat">Memories</button>
+  <button data-tab="help">Guide</button>
 </nav>
 <main>
+  <!-- ======================= cat -->
   <section id="tab-cat" class="tab on">
     <div id="needs" class="needs"></div>
     <h3>Quick care</h3>
     <div class="grid" id="quick"></div>
     <h3>Life together</h3>
     <div class="stats" id="stats"></div>
-    <div class="actions">
-      <button id="hideBtn" class="btn small ghost">Hide cat</button>
-      <button id="quitBtn" class="btn small warn">Quit Desktop Cat</button>
-    </div>
   </section>
 
+  <!-- ======================= iron man -->
+  <section id="tab-suit" class="tab">
+    <div id="suitBars" class="needs"></div>
+    <h3>Deploy enemies</h3>
+    <div class="grid" id="ironEnemies"></div>
+    <h3>Commands</h3>
+    <div class="grid" id="ironQuick"></div>
+    <h3>Combat record</h3>
+    <div class="stats" id="ironStats"></div>
+  </section>
+
+  <!-- ======================= reminders (both) -->
+  <section id="tab-reminders" class="tab">
+    <div class="card pad">
+      <div class="rem-add">
+        <input type="time" id="remTime" required>
+        <input id="remText" maxlength="200" placeholder="What do you need to do?" spellcheck="true">
+      </div>
+      <div class="rem-add2">
+        <select id="remRepeat">
+          <option value="once">Once</option><option value="daily">Every day</option>
+          <option value="weekdays">Weekdays</option><option value="weekends">Weekends</option>
+        </select>
+        <button id="remAdd" class="btn small">Add reminder</button>
+      </div>
+      <div class="rem-quick"><span>Quick timer:</span>
+        <button data-min="5">5 min</button><button data-min="15">15 min</button><button data-min="30">30 min</button><button data-min="60">1 hour</button>
+      </div>
+    </div>
+    <p id="remNext" class="next"></p>
+    <div id="remList"></div>
+    <p class="muted" id="remEmpty">No reminders yet. Add one above — at that time your buddy will come to the middle of your main screen and tell you.</p>
+  </section>
+
+  <!-- ======================= settings -->
   <section id="tab-settings" class="tab">
-    <div class="card">
+    <div class="card only-cat">
       <label class="row"><span>Fur</span><span class="swatches" id="fur"></span></label>
       <label class="row"><span>Eyes</span><span class="swatches" id="eyes"></span></label>
       <label class="row"><span>Size</span><select data-k="size"><option value="tiny">Tiny</option><option value="small">Small</option><option value="medium">Medium</option><option value="large">Large</option></select></label>
-    </div>
-    <div class="card">
       <label class="row"><span>Time speed<small>How fast needs change. Turbo is for trying things out.</small></span>
         <select data-k="timeSpeed"><option value="relaxed">Relaxed (½×)</option><option value="normal">Normal</option><option value="fast">Fast (4×)</option><option value="turbo">Turbo (25×)</option></select></label>
       <label class="row"><span>Mischief<small>Scratching the screen &amp; playing with files.</small></span>
         <select data-k="mischief"><option value="off">Off — angel cat</option><option value="low">Low</option><option value="normal">Normal</option><option value="high">High — chaos</option></select></label>
+      <label class="row"><span>Use my Desktop file names<small>The cat plays with pretend copies named after items on your Desktop. Only names are read — your files are never touched.</small></span><input type="checkbox" data-k="realFiles" class="toggle"></label>
+    </div>
+    <div class="card only-iron">
+      <label class="row"><span>Suit</span><span class="swatches" id="suits"></span></label>
+      <label class="row"><span>Size</span><select data-k="ironSize"><option value="tiny">Tiny</option><option value="small">Small</option><option value="medium">Medium</option><option value="large">Large</option></select></label>
+      <label class="row"><span>Auto-defense<small>Attack enemies as soon as they appear.</small></span><input type="checkbox" data-k="autoDefend" class="toggle"></label>
+      <label class="row"><span>Random invasions<small>Enemies show up on their own now and then.</small></span>
+        <select data-k="invasions"><option value="off">Off</option><option value="rare">Rare (every ~30 min)</option><option value="often">Often (every ~6 min)</option></select></label>
+      <label class="row"><span>Difficulty<small>Enemy toughness and damage.</small></span>
+        <select data-k="difficulty"><option value="easy">Easy</option><option value="normal">Normal</option><option value="hard">Hard</option></select></label>
+      <label class="row"><span>HUD callouts<small>"TARGET LOCKED", "MISSILES AWAY"…</small></span><input type="checkbox" data-k="hudCallouts" class="toggle"></label>
     </div>
     <div class="card">
-      <label class="row"><span>Open menu with<small id="hookInfo"></small></span>
-        <select data-k="rightClick"><option value="anywhere">Right-click anywhere</option><option value="alt">Alt/⌥ + right-click anywhere</option><option value="cat">Right-click on the cat only</option></select></label>
+      <label class="row"><span>Open menu with<small>Right-clicking the character always works.</small></span>
+        <select data-k="rightClick"><option value="anywhere">Right-click anywhere</option><option value="alt">Alt/⌥ + right-click anywhere</option><option value="cat">Right-click on the character only</option></select></label>
       <div class="row" id="hookRow"><span>Global right-click<small id="hookStatus"></small></span><button id="hookBtn" class="btn small">Enable…</button></div>
     </div>
     <div class="card">
       <label class="row"><span>Sounds</span><input type="checkbox" data-k="sound" class="toggle"></label>
       <label class="row"><span>Volume</span><input type="range" min="0" max="1" step="0.05" data-k="volume"></label>
-      <label class="row"><span>Notifications<small>When the cat is very hungry, weak or exhausted.</small></span><input type="checkbox" data-k="notifications" class="toggle"></label>
-      <label class="row"><span>Thought bubbles</span><input type="checkbox" data-k="bubbles" class="toggle"></label>
-      <label class="row"><span>Use my Desktop file names<small>The cat plays with pretend copies named after items on your Desktop. Only names are read — your files are never touched.</small></span><input type="checkbox" data-k="realFiles" class="toggle"></label>
+      <label class="row"><span>Read reminders aloud<small>The character says the reminder out loud.</small></span><input type="checkbox" data-k="voice" class="toggle"></label>
+      <label class="row"><span>Notifications</span><input type="checkbox" data-k="notifications" class="toggle"></label>
+      <label class="row only-cat"><span>Thought bubbles</span><input type="checkbox" data-k="bubbles" class="toggle"></label>
       <label class="row"><span>Start when I log in</span><input type="checkbox" data-k="launchAtLogin" class="toggle"></label>
     </div>
-    <div class="card danger">
+    <div class="card danger only-cat">
       <div class="row"><span>Start over<small>Rehome this cat and adopt a new kitten.</small></span><button id="reset" class="btn small warn">Adopt new kitten</button></div>
     </div>
   </section>
 
+  <!-- ======================= memories (cat) -->
   <section id="tab-memories" class="tab">
     <p class="muted" id="memEmpty">No memories yet. Take good care of your kitty!</p>
     <div id="memorial"></div>
   </section>
 
+  <!-- ======================= guide -->
   <section id="tab-help" class="tab help">
-    <div class="card">
+    <div class="card pad only-cat">
       <h4>🖱️ The menu</h4>
-      <p>Right-click anywhere (or right-click the cat) to open the care menu. You can also use the tray / menu-bar icon or <b id="sc"></b>.</p>
+      <p>Right-click anywhere (or right-click the cat) to open the care menu. You can also use the tray / menu-bar icon or <b class="sc"></b>.</p>
       <h4>✋ Pick up the cat</h4>
       <p>Drag the cat — you'll carry it by the scruff like a mother cat. Drop it anywhere, even on another monitor. Shake it too much and it gets dizzy!</p>
       <h4>💗 Pet</h4>
@@ -80,15 +130,36 @@
       <h4>🍽️ Needs</h4>
       <p>Watch the thought bubbles: 🐟 hungry, 🌙 sleepy, 💩 needs a clean-up, 🧶 bored, ➕ sick. If it starves for too long, it will pass away.</p>
       <h4>🧹 Clean &amp; fix</h4>
-      <p>Choose <i>Clean up → Scoop poop</i> and click each poop. <i>Fix the screen</i> repairs claw marks and tidies files the cat dragged around. A scratching post saves your screen.</p>
+      <p>Choose <i>Clean up → Scoop poop</i> and click each poop. <i>Fix the screen</i> repairs claw marks and tidies files the cat dragged around.</p>
       <h4>🐭 Play</h4>
-      <p>Mouse chase turns your cursor into a mouse the cat hunts — hold still and it might catch you! Also try the laser, yarn (drag &amp; throw it), a box, catnip and the brush.</p>
+      <p>Mouse chase turns your cursor into a mouse the cat hunts — hold still and it might catch you! Also try the laser, yarn, a box, catnip and the brush.</p>
+    </div>
+    <div class="card pad only-iron">
+      <h4>🖱️ The menu</h4>
+      <p>Right-click anywhere (or on Iron Man) for the suit menu. Tray icon and <b class="sc"></b> work too.</p>
+      <h4>🎯 Enemies</h4>
+      <p><i>Deploy enemy</i> drops a flying drone, ground walker, tank, drone swarm or a heavy mech exactly where you right-clicked. Iron Man engages automatically. Click an enemy to lock it as his priority target.</p>
+      <h4>💥 Weapons</h4>
+      <p>Repulsors (palm blasts), double hand blast for close range, homing micro-missiles from the shoulders, and the arc-reactor unibeam that cuts through a whole line. <i>Attack here</i> fires at the spot you right-clicked.</p>
+      <h4>⚡ Power &amp; armor</h4>
+      <p>Flying and weapons drain the arc reactor; standing on the ground recharges it. Missiles reload slowly. If armor hits zero the suit goes offline, falls, and reboots.</p>
+      <h4>🛫 Flight</h4>
+      <p>He lives on the floor of your screens — to go anywhere higher he has to fly. Drag him and let go: his thrusters catch him.</p>
+    </div>
+    <div class="card pad">
+      <h4>⏰ Reminders</h4>
+      <p>In the Reminders tab, set a time and what you need to do. At that time your buddy comes to the middle of your main screen, shows it and reads it aloud. Press Done, or snooze for 5 or 15 minutes.</p>
       <h4>🤫 Working?</h4>
-      <p>Quiet time makes the cat nap in a corner without needs or mess. Hide cat removes it completely (bring it back from the tray icon).</p>
+      <p>Quiet time / stand-by keeps your buddy calm in a corner. Hide removes it completely (bring it back from the tray icon or by opening the app again).</p>
     </div>
   </section>
+  <div class="actions">
+    <button id="hideBtn" class="btn small ghost">Hide</button>
+    <button id="quitBtn" class="btn small warn">Quit Desktop Buddies</button>
+  </div>
 </main>
 <script src="../renderer/catArt.js"></script>
+<script src="../renderer/ironArt.js"></script>
 <script src="home.js"></script>
 </body>
 </html>

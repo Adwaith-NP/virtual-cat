@@ -26,7 +26,69 @@
     });
   }
 
+  function ironItems(s, ctx) {
+    const h = s.hero, n = s.enemies.length, air = h.mode === 'air';
+    const out = [];
+    out.push({
+      icon: '🎯', label: 'Deploy enemy', badge: n || null, hint: 'right here',
+      sub: [
+        { icon: '🛸', label: 'Flying drone', cmd: 'spawn', args: { kind: 'drone' } },
+        { icon: '🤖', label: 'Ground walker', cmd: 'spawn', args: { kind: 'walker' } },
+        { icon: '🛞', label: 'Tank', cmd: 'spawn', args: { kind: 'tank' } },
+        { icon: '🐝', label: 'Drone swarm', cmd: 'spawn', args: { kind: 'swarm' }, hint: '6 kamikaze minis' },
+        { icon: '👾', label: 'Heavy mech (boss)', cmd: 'spawn', args: { kind: 'boss' }, hint: 'big trouble' },
+        '-',
+        { icon: '🧹', label: n ? `Clear all enemies (${n})` : 'No enemies', cmd: 'clearEnemies', disabled: !n },
+      ],
+    });
+    out.push({
+      icon: '💥', label: 'Attack here',
+      sub: [
+        { icon: '✋', label: 'Repulsor blast', cmd: 'attack', args: { kind: 'repulsor' } },
+        { icon: '🚀', label: `Micro-missiles (${h.missiles})`, cmd: 'attack', args: { kind: 'missiles' }, disabled: h.missiles < 1 },
+        { icon: '🔆', label: 'Unibeam (arc reactor)', cmd: 'attack', args: { kind: 'unibeam' }, disabled: h.power < 20, hint: 'chest beam' },
+        { icon: '👐', label: 'Double hand blast', cmd: 'attack', args: { kind: 'blast' } },
+      ],
+    });
+    out.push({
+      icon: '🛫', label: 'Flight',
+      sub: [
+        air ? { icon: '🛬', label: 'Land', cmd: 'land' } : { icon: '🛫', label: 'Take off & hover', cmd: 'takeoff' },
+        { icon: '📍', label: 'Fly here', cmd: 'flyTo' },
+        { icon: '🔄', label: 'Patrol the screens', cmd: 'patrol' },
+        { icon: '💨', label: 'Fly-by', cmd: 'flyby' },
+        { icon: '📡', label: 'Scan the area', cmd: 'scan' },
+      ],
+    });
+    out.push({
+      icon: '🦾', label: 'Suit', badge: h.armor < 30 || h.power < 20 ? '!' : null,
+      sub: [
+        { icon: '🛠️', label: `Repair armor (${Math.round(h.armor)}%)`, cmd: 'repair' },
+        { icon: '⚡', label: `Recharge reactor (${Math.round(h.power)}%)`, cmd: 'recharge', hint: 'also reloads missiles' },
+        { icon: '👍', label: 'Thumbs up', cmd: 'thumbsUp' },
+        { icon: '🖥️', label: 'Run diagnostics', cmd: 'diagnostics', hint: 'CPU · memory · battery' },
+        '-',
+        ...[['classic', 'Classic red & gold'], ['stealth', 'Stealth'], ['silver', 'Silver prototype'], ['patriot', 'Patriot']].map(([k, l]) => ({ icon: '🎨', label: l, cmd: 'setting', args: { key: 'suit', value: k }, checked: s.suit === k })),
+      ],
+    });
+    out.push({ icon: '⏰', label: 'Reminders…', cmd: 'home', args: { tab: 'reminders' }, hint: 'time + task' });
+    out.push({ icon: '🐱', label: 'Switch to Cat', cmd: 'character', args: { name: 'cat' } });
+    out.push('-');
+    out.push({ icon: s.quiet ? '🔋' : '🌙', label: s.quiet ? 'Exit stand-by' : 'Stand-by mode', cmd: 'quiet', hint: s.quiet ? '' : 'no fights, no noise' });
+    out.push({ icon: '🏠', label: 'HQ…', cmd: 'home', hint: 'stats & settings' });
+    if (info && info.hookNeedsPermission) out.push({ icon: '🖱️', label: 'Enable right-click anywhere…', cmd: 'enableHook' });
+    out.push({
+      icon: '⋯', label: 'More',
+      sub: [
+        { icon: '👻', label: 'Hide Iron Man', cmd: 'hide', hint: 'tray icon brings him back' },
+        { icon: '⏻', label: 'Quit Desktop Buddies', cmd: 'quit', danger: true },
+      ],
+    });
+    return out;
+  }
+
   function items(s, ctx) {
+    if (s.character === 'ironman') return ironItems(s, ctx);
     const c = s.cat, e = s.ents, tool = s.tool && s.tool.kind;
     const poops = e.poops.length, scratches = e.scratches.filter((x) => !x.fixing).length, files = e.files.length;
     const st = c.stats;
@@ -36,8 +98,9 @@
       out.push({ icon: '🐱', label: 'Adopt a new kitten', cmd: 'adopt', accent: true });
       if (e.grave) out.push({ icon: '🕊️', label: 'Move memorial to Cat Home', cmd: 'removeGrave' });
       out.push('-');
+      out.push({ icon: '🦾', label: 'Switch to Iron Man', cmd: 'character', args: { name: 'ironman' } });
       out.push({ icon: '🏠', label: 'Cat Home…', cmd: 'home' });
-      out.push({ icon: '⏻', label: 'Quit Desktop Cat', cmd: 'quit', danger: true });
+      out.push({ icon: '⏻', label: 'Quit Desktop Buddies', cmd: 'quit', danger: true });
       return out;
     }
     if (tool) out.push({ icon: '✋', label: `Put away ${TOOL_LABEL[tool] || 'tool'}`, cmd: 'stopTool', accent: true, hint: 'Esc' });
@@ -83,6 +146,8 @@
       ],
     });
     out.push({ icon: '👋', label: `Call ${c.name} here`, cmd: 'call' });
+    out.push({ icon: '⏰', label: 'Reminders…', cmd: 'home', args: { tab: 'reminders' }, hint: 'time + task' });
+    out.push({ icon: '🦾', label: 'Switch to Iron Man', cmd: 'character', args: { name: 'ironman' } });
     out.push('-');
     out.push({ icon: s.quiet ? '🔔' : '🤫', label: s.quiet ? 'End quiet time' : 'Quiet time', cmd: 'quiet', hint: s.quiet ? '' : 'naps, no mess' });
     out.push({ icon: '🏠', label: 'Cat Home…', cmd: 'home', hint: 'stats & settings' });
@@ -92,7 +157,7 @@
       sub: [
         { icon: '🧺', label: 'Put away toys & bed', cmd: 'putAway' },
         { icon: '👻', label: 'Hide cat', cmd: 'hide', hint: 'tray icon brings it back' },
-        { icon: '⏻', label: 'Quit Desktop Cat', cmd: 'quit', danger: true },
+        { icon: '⏻', label: 'Quit Desktop Buddies', cmd: 'quit', danger: true },
       ],
     });
     return out;
@@ -129,6 +194,27 @@
   }
 
   function header(s) {
+    if (s.character === 'ironman') {
+      const h = el('div', 'head');
+      const av = document.createElement('canvas');
+      av.className = 'avatar';
+      const d = window.devicePixelRatio || 1;
+      av.width = 46 * d; av.height = 46 * d;
+      h.appendChild(av);
+      const x = av.getContext('2d');
+      x.setTransform(d, 0, 0, d, 0, 0);
+      x.fillStyle = 'rgba(80,200,255,0.12)';
+      x.beginPath(); x.arc(23, 23, 23, 0, Math.PI * 2); x.fill();
+      x.save(); x.beginPath(); x.arc(23, 23, 23, 0, Math.PI * 2); x.clip();
+      x.translate(21, 108); x.scale(0.95, 0.95);
+      IronArt.drawBust(x, s.suit, performance.now() / 1000);
+      x.restore();
+      const t = el('div', 'htx');
+      t.appendChild(el('div', 'name', 'IRON MAN'));
+      t.appendChild(el('div', 'mood', `MK-XLII · ${s.hero.status}`));
+      h.appendChild(t);
+      return h;
+    }
     const c = s.cat;
     const h = el('div', 'head');
     const av = document.createElement('canvas');
@@ -162,10 +248,18 @@
     x.restore();
   }
 
+  function statsOf(s) {
+    if (s.character === 'ironman') { const h = s.hero; return { power: h.power, armor: h.armor, missiles: (h.missiles / 12) * 100 }; }
+    return s.cat.stats;
+  }
+
   function meters(s) {
     const m = el('div', 'meters');
-    const st = s.cat.stats;
-    const rows = [['🍗', 'food', 'Food'], ['⚡', 'energy', 'Energy'], ['🧶', 'fun', 'Fun'], ['🫧', 'clean', 'Clean'], ['❤️', 'health', 'Health']];
+    const st = statsOf(s);
+    const rows = s.character === 'ironman'
+      ? [['⚡', 'power', 'Arc reactor power'], ['🛡️', 'armor', 'Armor integrity'], ['🚀', 'missiles', 'Missiles']]
+      : [['🍗', 'food', 'Food'], ['⚡', 'energy', 'Energy'], ['🧶', 'fun', 'Fun'], ['🫧', 'clean', 'Clean'], ['❤️', 'health', 'Health']];
+    if (s.character === 'ironman') m.classList.add('three');
     for (const [ic, k, label] of rows) {
       const r = el('div', 'meter');
       r.title = `${label}: ${Math.round(st[k])}%`;
@@ -186,13 +280,15 @@
     if (!isOpen || !panel) return;
     const s = getState();
     if (!s) return;
+    const st = statsOf(s);
     panel.querySelectorAll('.fill').forEach((f) => {
-      const v = s.cat.stats[f.dataset.k];
+      const v = st[f.dataset.k];
       f.style.width = Math.round(v) + '%';
       f.classList.toggle('low', v < 20);
     });
     const mood = panel.querySelector('.mood');
-    if (mood && !s.cat.dead) mood.textContent = s.cat.mood;
+    if (mood && s.character === 'ironman') mood.textContent = `MK-XLII · ${s.hero.status}`;
+    else if (mood && s.cat && !s.cat.dead) mood.textContent = s.cat.mood;
     // close if the mouse wandered off for a while
     if (Date.now() - lastInside > 9000) close();
   }
@@ -217,13 +313,14 @@
     origin = { x: m.x, y: m.y };
     isOpen = true;
     lastInside = Date.now();
-    panel = el('div', 'menu');
+    const ironTheme = s.character === 'ironman';
+    panel = el('div', 'menu' + (ironTheme ? ' iron' : ''));
     panel.appendChild(header(s));
-    if (!s.cat.dead) panel.appendChild(meters(s));
+    if (ironTheme || !s.cat.dead) panel.appendChild(meters(s));
     const list = el('div', 'list');
     buildList(items(s, m.ctx || {}), list, false);
     panel.appendChild(list);
-    if (!m.hook && !s.cat.dead && m.shortcut) {
+    if (!m.hook && (ironTheme || !s.cat.dead) && m.shortcut) {
       panel.appendChild(el('div', 'foot', `Tip: ${m.shortcut} opens this menu anywhere`));
     }
     rootEl.appendChild(panel);
@@ -253,7 +350,7 @@
     closeFly();
     flyFor = row;
     row.classList.add('open');
-    flyout = el('div', 'menu sub');
+    flyout = el('div', 'menu sub' + (panel && panel.classList.contains('iron') ? ' iron' : ''));
     const list = el('div', 'list');
     buildList(sub, list, true);
     flyout.appendChild(list);

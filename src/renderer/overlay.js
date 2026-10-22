@@ -25,17 +25,21 @@
     B = d.bounds;
     document.body.dataset.platform = d.platform;
   });
-  let lastEnts = null, lastStateAt = 0;
+  let lastEnts = null, lastStateAt = 0, scene = 'cat', iron = null;
+  const EMPTY_ENTS = { bowls: [], poops: [], scratches: [], files: [], yarns: [], boxes: [], posts: [], catnips: [], bed: null, grave: null };
   api.on('state', (s) => {
     lastStateAt = Date.now();
-    if (s.ents) lastEnts = s.ents; else s.ents = lastEnts || { bowls: [], poops: [], scratches: [], files: [], yarns: [], boxes: [], posts: [], catnips: [], bed: null, grave: null };
+    const ch = s.character || 'cat';
+    if (ch !== scene) switchScene(ch);
+    if (ch === 'cat') { if (s.ents) lastEnts = s.ents; else s.ents = lastEnts || EMPTY_ENTS; }
+    else s.ents = EMPTY_ENTS;
     latest = s;
     snaps.push(s);
     if (snaps.length > 4) snaps.shift();
     const cfg = `${s.sound}|${s.volume}`;
     if (cfg !== soundCfg) { soundCfg = cfg; CatSound.configure(s.sound, s.volume); }
   });
-  api.on('fx', (e) => spawnFx(e));
+  api.on('fx', (e) => { if (scene === 'ironman' && iron && iron.expandFx(e, latest ? latest.s : 1)) return; spawnFx(e); });
   api.on('sound', (e) => CatSound.play(e.name));
   api.on('menu:open', (m) => CatMenu.open(m));
   api.on('menu:close', () => CatMenu.close(true));
@@ -43,15 +47,16 @@
 
   // ---------------------------------------------------------------- input
   const G = (e) => ({ x: B.x + e.clientX, y: B.y + e.clientY });
+  const onPanel = (t) => !!(t && t.closest && t.closest('.brief'));
   window.addEventListener('pointerdown', (e) => {
-    if (CatMenu.contains(e.target)) return;
+    if (CatMenu.contains(e.target) || onPanel(e.target)) return;
     if (CatMenu.isOpen()) { CatMenu.close(); return; }
     if (e.button !== 0) return;
     try { document.documentElement.setPointerCapture(e.pointerId); } catch (err) { /* */ }
     api.send('pointer', { type: 'down', ...G(e), button: 0 });
   });
   window.addEventListener('pointerup', (e) => {
-    if (CatMenu.contains(e.target) || e.button !== 0) return;
+    if (CatMenu.contains(e.target) || onPanel(e.target) || e.button !== 0) return;
     api.send('pointer', { type: 'up', ...G(e), button: 0 });
   });
   // a lost press (touch cancel, capture lost) must still end the drag
@@ -62,7 +67,7 @@
   for (const ev of ['dragover', 'drop']) window.addEventListener(ev, (e) => e.preventDefault());
   window.addEventListener('contextmenu', (e) => {
     e.preventDefault();
-    if (CatMenu.contains(e.target)) return;
+    if (CatMenu.contains(e.target) || onPanel(e.target)) return;
     api.send('context', G(e));
   });
 
@@ -533,7 +538,25 @@
     if (particles.length > 400) particles.splice(0, particles.length - 400);
   }
 
+  function spawnParticles(o) {
+    const n = o.n || 1;
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const sp = o.speed ? o.speed * (0.35 + 0.65 * Math.random()) : 0;
+      const sprd = o.spread || 0;
+      particles.push({
+        type: o.kind, x: o.x + (Math.random() - 0.5) * 2 * sprd, y: o.y + (Math.random() - 0.5) * 1.2 * sprd,
+        vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - (o.rise || 0) - (o.kind === 'debris' ? sp * 0.5 : 0),
+        g: o.g || 0, life: (o.life || 0.6) * (0.8 + 0.4 * Math.random()), age: -(o.stagger || 0) * i,
+        size: (o.size || 1) * (o.small ? 0.5 : 0.75 + 0.5 * Math.random()), rot: Math.random() * 6, vr: (Math.random() - 0.5) * 10,
+        color: o.color, flat: o.flat,
+      });
+    }
+    if (particles.length > 500) particles.splice(0, particles.length - 500);
+  }
+
   function drawParticle(ctx, p, x, y, unit, T) {
+    if (p.age < 0) return;
     const k = p.age / p.life;
     ctx.save();
     ctx.translate(x, y);
@@ -543,8 +566,8 @@
       ctx.scale(sc * (1 - k * 0.5), sc * (1 - k * 0.5));
       PROPS.file(ctx, { kind: p.data.fkind, ext: p.data.ext, rot: (p.data.rot || 0) + k * 2, name: null }, T);
     } else {
-      const fn = PARTICLES[p.type];
-      if (fn) { ctx.scale(sc, sc); fn(ctx, { size: 1, k, rot: p.rot, color: p.color, text: p.text, age: p.age }); }
+      const fn = PARTICLES[p.type] || IronArt.FX[p.type];
+      if (fn) { ctx.scale(sc, sc); fn(ctx, { size: 1, k, rot: p.rot, color: p.color, text: p.text, age: p.age, flat: p.flat }); }
     }
     ctx.restore();
   }
@@ -584,7 +607,8 @@
     const mine = particles.filter((p) => !p.inCat && inB(p, 60));
     const showTool = tool && curHere && !(tool === 'mouse' && s.toyCaught);
     renderTool(showTool ? tool : null, cur, s, T, dt);
-    if (!mine.length) {
+    const ironFx = scene === 'ironman' && iron && iron.fxBusy(s);
+    if (!mine.length && !ironFx) {
       if (fxWasDrawn && fxCtx) { fxCtx.setTransform(1, 0, 0, 1, 0, 0); fxCtx.clearRect(0, 0, fxCanvas.width, fxCanvas.height); fxWasDrawn = false; fxIdleSince = now; }
       if (fxCanvas && now - fxIdleSince > 3000) releaseFx();
       return;
@@ -595,6 +619,7 @@
     ctx.clearRect(0, 0, fxCanvas.width, fxCanvas.height);
     ctx.setTransform(d, 0, 0, d, -B.x * d, -B.y * d);
     fxWasDrawn = true;
+    if (ironFx) iron.drawFx(ctx, s, now, T);
     for (const p of mine) drawParticle(ctx, p, p.x, p.y, 1, T);
   }
 
@@ -620,11 +645,134 @@
     }
   }
 
+  // ---------------------------------------------------------------- scenes
+  function switchScene(ch) {
+    if (scene === 'cat') {
+      catSprite.hide(); ghostSprite.hide();
+      for (const sp of entSprites.values()) sp.destroy();
+      entSprites.clear();
+      CatSound.setPurr(false);
+      R.pose = null; R.poseKey = '';
+    } else if (iron) iron.dispose();
+    scene = ch;
+    snaps = [];
+    if (ch === 'ironman' && !iron) {
+      iron = IronScene.create({ Sprite, inB, spawn: spawnParticles, snaps: () => snaps, latest: () => latest });
+    }
+    document.body.dataset.character = ch;
+  }
+
+  // ---------------------------------------------------------------- reminder briefing + diagnostics panels
+  const panel = { el: document.createElement('div'), id: null, spokeFor: null, rectKey: '' };
+  panel.el.className = 'brief';
+  panel.el.style.display = 'none';
+  document.body.appendChild(panel.el);
+  const diag = { el: document.createElement('div'), key: '' };
+  diag.el.className = 'diag';
+  diag.el.style.display = 'none';
+  document.body.appendChild(diag.el);
+  let battery = null;
+  try { navigator.getBattery && navigator.getBattery().then((b) => { battery = b; }).catch(() => {}); } catch (e) { /* */ }
+
+  function txt(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+
+  function buildPanel(a) {
+    const el = panel.el;
+    el.innerHTML = '';
+    el.dataset.character = a.character || scene;
+    el.appendChild(txt('div', 'brief-head', a.header || 'Reminder'));
+    if (a.character === 'ironman') el.appendChild(txt('div', 'brief-time', `T-MINUS 0 · ${a.time}`));
+    el.appendChild(txt('div', 'brief-task', a.text));
+    el.appendChild(txt('div', 'brief-quip', a.quip || ''));
+    const row = txt('div', 'brief-btns');
+    const btn = (label, cmd, args, primary) => {
+      const b = txt('button', primary ? 'primary' : '', label);
+      b.addEventListener('click', (e) => { e.stopPropagation(); api.send('cmd', { name: cmd, args: { id: a.id, ...(args || {}) } }); });
+      row.appendChild(b);
+    };
+    const ironStyle = a.character === 'ironman';
+    btn(ironStyle ? 'ACKNOWLEDGED' : 'Done ✓', 'reminderDone', null, true);
+    btn(ironStyle ? 'SNOOZE 5' : 'Snooze 5 min', 'reminderSnooze', { minutes: 5 });
+    btn(ironStyle ? 'SNOOZE 15' : '15 min', 'reminderSnooze', { minutes: 15 });
+    el.appendChild(row);
+  }
+
+  function renderPanels(now) {
+    const s = latest;
+    const a = s.announce;
+    // the briefing appears on the main screen, above where the character comes to stand
+    let show = false;
+    if (a) {
+      const wa = s.primaryWork || null;
+      const ready = a.arrived || Date.now() - a.start > 3500;
+      if (ready) {
+        const S = s.s;
+        let ax, ay;
+        if (scene === 'ironman' && s.hero) { ax = s.hero.x; ay = s.hero.y - 120 * S; }
+        else if (s.cat) { ax = s.cat.x; ay = s.cat.y - 95 * S; }
+        if (!a.arrived && wa) { ax = wa.x + wa.width / 2; ay = wa.y + wa.height * 0.62 - 110 * S; }
+        if (ax != null && inB({ x: ax, y: ay })) {
+          show = true;
+          if (panel.id !== a.id + a.start) { panel.id = a.id + a.start; buildPanel(a); }
+          const el = panel.el;
+          el.style.display = '';
+          const w = el.offsetWidth, h = el.offsetHeight;
+          const lx = clamp(ax - B.x - w / 2, 10, B.width - w - 10), ly = clamp(ay - B.y - h, 10, B.height - h - 10);
+          el.style.transform = `translate3d(${Math.round(lx)}px,${Math.round(ly)}px,0)`;
+          const key = `${Math.round(lx)},${Math.round(ly)},${w},${h}`;
+          if (key !== panel.rectKey) { panel.rectKey = key; api.send('hud', { rects: [{ x: B.x + lx, y: B.y + ly, w, h }] }); }
+          if (panel.spokeFor !== panel.id) {
+            panel.spokeFor = panel.id;
+            CatSound.play(scene === 'ironman' ? 'alert' : 'reminder');
+            if (s.voice) setTimeout(() => CatSound.speak(a.speech || a.text, a.character || scene), 600);
+          }
+        }
+      }
+    }
+    if (!show && panel.el.style.display !== 'none') {
+      panel.el.style.display = 'none';
+      panel.rectKey = '';
+      api.send('hud', { rects: [] });
+    }
+    // hero diagnostics card, follows the hero
+    let dshow = false;
+    if (scene === 'ironman' && s.diag && s.hero) {
+      const S = s.s, h = s.hero;
+      const ax = h.x + h.facing * 40 * S, ay = h.y - 100 * S;
+      if (inB({ x: ax, y: ay })) {
+        dshow = true;
+        const i = s.diag.info || {};
+        const bat = battery ? `${Math.round(battery.level * 100)}%${battery.charging ? ' ⚡' : ''}` : 'n/a';
+        const lines = [
+          ['SYSTEM', i.platform || ''], ['CPU', i.cpu != null ? `${i.cpu}%  · ${i.cores || '?'} cores` : '—'],
+          ['MEMORY', i.mem != null ? `${i.mem}% of ${i.memGB} GB` : `${i.memGB || '?'} GB`], ['BATTERY', bat],
+          ['UPTIME', i.uptime || '—'], ['TIME', new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })],
+          ['THREATS DOWN', String(s.diag.kills || 0)],
+        ];
+        const key = JSON.stringify(lines);
+        if (key !== diag.key) {
+          diag.key = key;
+          diag.el.innerHTML = '';
+          diag.el.appendChild(txt('div', 'diag-head', 'DIAGNOSTICS'));
+          for (const [k, v] of lines) { const r = txt('div', 'diag-row'); r.appendChild(txt('span', '', k)); r.appendChild(txt('b', '', v)); diag.el.appendChild(r); }
+        }
+        diag.el.style.display = '';
+        const w = diag.el.offsetWidth, hh = diag.el.offsetHeight;
+        const lx = clamp(h.facing > 0 ? ax - B.x : ax - B.x - w, 8, B.width - w - 8), ly = clamp(ay - B.y - hh, 8, B.height - hh - 8);
+        diag.el.style.transform = `translate3d(${Math.round(lx)}px,${Math.round(ly)}px,0)`;
+      }
+    }
+    if (!dshow && diag.el.style.display !== 'none') diag.el.style.display = 'none';
+  }
+
   // ---------------------------------------------------------------- loop
   // Adaptive frame rate: smooth when things move, gentle on the CPU/GPU when idle.
   const MOVING = new Set(['walk', 'run', 'pounce', 'fall', 'held', 'scratchFront', 'cover', 'shake', 'dizzy', 'groom', 'roll', 'standUp']);
   function busyHere() {
-    const s = latest, c = s.cat, S = s.s;
+    const s = latest;
+    if (panel.el.style.display !== 'none' || diag.el.style.display !== 'none') return true;
+    if (scene === 'ironman') return particles.some((p) => inB(p, 60)) || iron.busyHere(s);
+    const c = s.cat, S = s.s;
     if (inB({ x: c.x, y: c.y - c.z }, 160 * S)) return true;
     if (c.dead && c.ghost && inB(c.ghost, 200 * S)) return true;
     if (particles.length || (s.tool && inB(s.cursor, 60))) return true;
@@ -636,6 +784,8 @@
     const s = latest, c = s.cat;
     if (document.hidden || Date.now() - lastStateAt > 2000) return 2; // hidden / paused: don't draw
     if (!busyHere()) return 3;
+    if (scene === 'ironman') return Math.max(iron.wantFps(s), particles.some((p) => inB(p, 60)) ? 60 : 0, panel.el.style.display !== 'none' ? 30 : 0);
+    if (s.announce) return 30;
     if ((s.tool && inB(s.cursor, 60)) || c.mode !== 'task' || c.speed > 120 || c.pose === 'pounce' || c.pose === 'run') return 60;
     let fps = c.dead ? (c.ghost && Date.now() - c.ghost.start < 7000 ? 40 : 4) : c.sleeping ? 8 : 12;
     if (c.speed > 1 || MOVING.has(c.pose) || (c.flags && c.flags.wiggle) || c.action) fps = 40;
@@ -657,16 +807,17 @@
     if (!latest) return;
     const pnow = performance.now();
     const fps = wantFps();
-    if (fps <= 3 && (document.hidden || Date.now() - lastStateAt > 2000)) { CatSound.setPurr(false); return; }
+    if (fps <= 3 && (document.hidden || Date.now() - lastStateAt > 2000)) { CatSound.setPurr(false); CatSound.setLoop('thrust', 0); return; }
     if (pnow - lastFrame < 1000 / fps - 4) return;
     const dt = Math.min(0.1, (pnow - lastFrame) / 1000);
     lastFrame = pnow;
     const now = Date.now();
     const T = now / 1000;
     try {
-      renderEntities(now, T);
-      renderCat(now, T, dt);
+      if (scene === 'ironman') iron.render(latest, now, T, dt);
+      else { renderEntities(now, T); renderCat(now, T, dt); }
       renderFx(now, T, dt);
+      renderPanels(now);
     } catch (e) {
       console.error('render error', e && e.stack || e);
     }

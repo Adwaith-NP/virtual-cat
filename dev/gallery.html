@@ -14,7 +14,8 @@
 <div id="bar">
   <label>scale <input id="scale" type="range" min="1" max="4" step="0.25" value="2"></label>
   <label>bg <select id="bg"><option>split</option><option>dark</option><option>light</option></select></label>
-  <label>mode <select id="mode"><option>poses</option><option>faces</option><option>props</option></select></label>
+  <label>mode <select id="mode"><option>poses</option><option>faces</option><option>props</option><option>iron</option><option>enemies</option></select></label>
+  <label>suit <select id="suit"></select></label>
   <label>palette <select id="pal"></select></label>
   <label>eyes <select id="eyes"></select></label>
   <label><input id="freeze" type="checkbox"> freeze</label>
@@ -22,12 +23,16 @@
 <canvas id="c"></canvas>
 <script src="../src/renderer/catArt.js"></script>
 <script src="../src/renderer/props.js"></script>
+<script src="../src/renderer/ironArt.js"></script>
 <script>
 const c = document.getElementById('c');
 const ctx = c.getContext('2d');
 const $ = (id) => document.getElementById(id);
 for (const k of Object.keys(CatArt.PALETTES)) $('pal').add(new Option(k));
 for (const k of Object.keys(CatArt.EYE_COLORS)) $('eyes').add(new Option(k));
+for (const k of Object.keys(IronArt.SUITS)) $('suit').add(new Option(k));
+const IRON = ['stand','idleLook','gauntlet','walk','crouch','hover','flyUp','fly','land','aim','blast','unibeam','missile','punch','thumbsUp','salute','stagger','down','powerDown','held'];
+const ENEMY_KINDS = ['drone','mini','walker','tank','boss'];
 const params = new URLSearchParams(location.search);
 if (params.get('mode')) $('mode').value = params.get('mode');
 if (params.get('scale')) $('scale').value = params.get('scale');
@@ -48,7 +53,7 @@ function draw(T) {
   const mode = $('mode').value;
   const cols = +(params.get('cols') || (mode === 'faces' ? 6 : 7));
   const cw = 130 * S, ch = (mode === 'faces' ? 110 : 140) * S;
-  let items = mode === 'poses' ? POSES : mode === 'faces' ? FACES : (window.PropsArt ? PropsArt.GALLERY : []);
+  let items = mode === 'poses' ? POSES : mode === 'faces' ? FACES : mode === 'iron' ? IRON : mode === 'enemies' ? ENEMY_KINDS : (window.PropsArt ? PropsArt.GALLERY : []);
   const only = params.get('only');
   if (only) { const set = only.split(','); items = items.filter((it) => set.includes(Array.isArray(it) ? it[0] : (it.name || it))); }
   const rows = Math.ceil(items.length / cols);
@@ -65,6 +70,25 @@ function draw(T) {
     ctx.fillStyle = light ? '#555' : '#aaa';
     ctx.fillText(Array.isArray(it) ? it[0] : (it.name || it), x + 6, y + 14);
     ctx.save();
+    if (mode === 'iron') {
+      ctx.translate(x + cw / 2, y + ch * 0.86);
+      ctx.scale(S, S);
+      const a = { x: Math.cos(Math.sin(T) * 0.8 - 0.3), y: Math.sin(Math.sin(T) * 0.8 - 0.3) };
+      const rig = IronArt.makeRig(it, { t: T % 2, T, phase: T * 6, aim: a, m: { charge: 0.5 + 0.5 * Math.sin(T * 5), beam: 1, air: false } });
+      ctx.fillStyle = 'rgba(0,0,0,0.2)';
+      ctx.beginPath(); ctx.ellipse(0, 0, 20, 4, 0, 0, Math.PI * 2); ctx.fill();
+      if (it === 'held') ctx.translate(0, -100);
+      IronArt.drawHero(ctx, rig, { suit: $('suit').value, T });
+      ctx.restore();
+      return;
+    }
+    if (mode === 'enemies') {
+      ctx.translate(x + cw / 2, y + ch * (it === 'drone' || it === 'mini' ? 0.5 : 0.85));
+      ctx.scale(S, S);
+      IronArt.drawEnemy(ctx, { kind: it, hp: 2, maxHp: 3, facing: -1, phase: T * 5, charge: 0.5 + 0.5 * Math.sin(T * 3), vx: 200 * Math.sin(T) }, T);
+      ctx.restore();
+      return;
+    }
     if (mode === 'props') {
       ctx.translate(x + cw / 2, y + ch * 0.62);
       ctx.scale(S, S);

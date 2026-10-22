@@ -1,12 +1,13 @@
 'use strict';
 /*
- * Desktop Cat — Electron main process.
+ * Desktop Buddies — Electron main process.
  *
  * One transparent, always-on-top, click-through overlay window per display.
- * The simulation (world.js) runs here at ~60 Hz and streams snapshots to the
- * overlays, which only draw. An overlay stops being click-through only while
- * the cursor is over something interactive (the cat, a poop with the scoop…)
- * or while its menu is open — so you can keep working underneath.
+ * The active character's simulation (world.js = cat, ironman.js = armored
+ * hero) runs here at 30–60 Hz and streams snapshots to the overlays, which
+ * only draw. An overlay stops being click-through only while the cursor is
+ * over something interactive (the character, a poop with the scoop, an
+ * enemy…) or over an open menu/panel — so you can keep working underneath.
  */
 const {
   app, BrowserWindow, screen, ipcMain, Tray, Menu, nativeImage, Notification,
@@ -17,7 +18,10 @@ const fs = require('fs');
 const os = require('os');
 const { Geo, inside } = require('./geometry');
 const { performance } = require('perf_hooks');
-const { World } = require('./world');
+const { World, DEFAULT_SETTINGS } = require('./world');
+const { IronWorld } = require('./ironman');
+const { Reminders } = require('./reminders');
+const sysinfo = require('./sysinfo');
 const { Store } = require('./store');
 const { desktopItems } = require('./names');
 const Hook = require('./hook');
@@ -29,7 +33,22 @@ const DEV = process.argv.includes('--dev');
 const ROOT = path.join(__dirname, '..', '..');
 const PRELOAD = path.join(__dirname, '..', 'preload.js');
 const ICON = path.join(ROOT, 'build', 'icon.png');
+const TRAY_ICONS = { cat: path.join(ROOT, 'build', 'tray-cat.png'), ironman: path.join(ROOT, 'build', 'tray-ironman.png') };
 const MENU_SHORTCUT = 'CommandOrControl+Alt+Shift+K';
+const APP_NAME = 'Desktop Buddies';
+
+// every setting, for both characters (cat ones come from world.js)
+const ALL_DEFAULTS = {
+  ...DEFAULT_SETTINGS,
+  character: 'cat',
+  voice: true,
+  suit: 'classic',
+  ironSize: 'small',
+  autoDefend: true,
+  invasions: 'off',
+  difficulty: 'normal',
+  hudCallouts: true,
+};
 
 // A desktop pet needs free window placement, always-on-top and the global cursor
 // position, which native Wayland doesn't allow — run through X11/XWayland instead.
@@ -46,10 +65,11 @@ if (isLinux) {
   app.commandLine.appendSwitch('enable-transparent-visuals');
   app.disableHardwareAcceleration();
 }
-if (isWin) app.setAppUserModelId('app.desktopcat.pet');
+if (isWin) app.setAppUserModelId('app.desktopbuddies');
 if (process.env.CAT_USER_DATA) app.setPath('userData', process.env.CAT_USER_DATA);
 
 let geo, world, store, tray = null, homeWin = null;
+let settings = null, worlds = {}, reminders = null;
 const overlays = new Map(); // display.id -> { win, display, ready, interactive, ui, cursor }
 let pressOverlay = null;
 let lastTick = 0, loop = null, lastSaveAt = 0, lastHomeAt = 0, lastTopAt = 0;
@@ -84,24 +104,30 @@ function init() {
     // gives the Cat Home window copy/paste shortcuts
     Menu.setApplicationMenu(Menu.buildFromTemplate([{ role: 'appMenu' }, { role: 'editMenu' }]));
   }
-  store = new Store(app.getPath('userData'));
+  // the app used to be called "Desktop Cat": import that save once
+  const legacy = process.env.CAT_USER_DATA
+    ? [path.join(process.env.CAT_USER_DATA, 'desktop-cat-save.json')] // test runs never touch real saves
+    : [path.join(app.getPath('appData'), 'Desktop Cat', 'desktop-cat-save.json')];
+  store = new Store(app.getPath('userData'), 'desktop-buddies-save.json', legacy);
   const data = store.load();
+  const v2 = data && data.version === 2;
+  settings = { ...ALL_DEFAULTS, ...((v2 ? data.settings : data && data.settings) || {}) };
+  if (!worldsKnown(settings.character)) settings.character = 'cat';
   geo = new Geo();
   geo.set(displayList());
-  world = new World({
-    geo,
-    data,
-    desktopItems: cachedDesktopItems,
-    emit: onWorldEvent,
-  });
+  worlds.cat = new World({ geo, data: v2 ? data.cat : data, settings, desktopItems: cachedDesktopItems, emit: (e) => onWorldEvent(e, 'cat') });
+  worlds.ironman = new IronWorld({ geo, data: v2 ? data.ironman : null, settings, emit: (e) => onWorldEvent(e, 'ironman'), sysinfo: () => sysinfo.info() });
+  world = worlds[settings.character];
+  if (world === worlds.ironman && !(v2 && data.ironman)) world.activate();
+  reminders = new Reminders(v2 ? data.reminders : [], onReminder);
   if (data && data.savedAt) {
     const away = (Date.now() - data.savedAt) / 1000;
-    if (away > 60) world.applyAway(away);
+    if (away > 60) worlds.cat.applyAway(away);
   } else {
     setTimeout(() => onWorldEvent({
       type: 'notify',
-      title: `🐱 Meet ${world.cat.name}!`,
-      body: `Right-click the cat to feed, play and care for it. Drag it to carry it around.${isMac ? ' To right-click anywhere, choose “Enable right-click anywhere…” in its menu.' : ''}`,
+      title: `🐱 Meet ${worlds.cat.cat.name}!`,
+      body: `Right-click the cat to feed, play and care for it — or switch to Iron Man from its menu.${isMac ? ' To right-click anywhere, choose “Enable right-click anywhere…”.' : ''}`,
     }), 4000);
   }
 
@@ -119,7 +145,7 @@ function init() {
     });
   } catch (e) { /* taken */ }
   maybeStartHook();
-  if (world.settings.launchAtLogin) applyLoginItem(true);
+  if (settings.launchAtLogin) applyLoginItem(true);
 
   powerMonitor.on('suspend', save);
   powerMonitor.on('shutdown', save);
@@ -167,15 +193,18 @@ async function devPoll() {
           try { console.log(`[js ${id}]`, JSON.stringify(await o.win.webContents.executeJavaScript(args.code))); } catch (e) { console.log(`[js ${id}] error`, e.message); }
         }
       }
-      else if (name === 'set') Object.assign(world.cat, args);
-      else if (name === 'settings') Object.assign(world.settings, args);
+      else if (name === 'set') Object.assign(world.cat || world.hero, args);
+      else if (name === 'settings') Object.assign(settings, args);
       else if (name === 'cursor') fakeCursor = args && args.x != null ? args : null;
       else if (name === 'down') world.pointerDown(currentCursor(), 0);
       else if (name === 'up') world.pointerUp(currentCursor(), 0);
       else if (name === 'menu') openMenu(args.x != null ? args : currentCursor(), args.native ? 'hook' : 'shortcut');
       else if (name === 'closemenu') for (const o of overlays.values()) closeMenu(o);
-      else if (name === 'task') { const c = world.cat; const fn = c[args.name]; if (fn) c.run(fn.apply(c, args.args || []), args.name, args.prio == null ? 90 : args.prio); }
-      else if (name === 'dump') fs.writeFileSync(args.file, JSON.stringify({ cat: world.snapshot().cat, task: world.cat.taskName, ents: world.ents, tool: world.tool, displays: geo.displays, press: world.press, ui: [...overlays.values()].map((o) => ({ ui: o.ui, id: o.menuId, rects: o.rects, interactive: o.interactive })), tickMs, tickN, metrics: app.getAppMetrics().map((m) => ({ type: m.type, cpu: m.cpu.percentCPUUsage })) }, null, 1));
+      else if (name === 'task') { const c = world.cat || world.hero; const fn = c[args.name]; if (fn) c.run(fn.apply(c, args.args || []), args.name, args.prio == null ? 90 : args.prio); }
+      else if (name === 'dump') {
+        const snap = world.snapshot();
+        fs.writeFileSync(args.file, JSON.stringify({ character: settings.character, cat: snap.cat, hero: snap.hero, enemies: snap.enemies, shots: snap.shots && snap.shots.length, task: (world.cat || world.hero).taskName, ents: world.ents, tool: world.tool, announce: world.announcement, reminders: reminders.serialize(), displays: geo.displays, press: world.press, ui: [...overlays.values()].map((o) => ({ ui: o.ui, id: o.menuId, rects: o.rects, hud: o.hudRects, interactive: o.interactive })), tickMs, tickN }, null, 1));
+      }
       else handleCmd(name, args);
     }
   } catch (e) {
@@ -190,8 +219,8 @@ async function devCapture(a) {
     if (!o.ready) continue;
     let rect;
     if (a.around) {
-      const c = world.cat;
-      const p = a.around === 'cursor' ? currentCursor() : { x: c.x, y: c.y - c.z - 30 };
+      const c = world.cat || world.hero;
+      const p = a.around === 'cursor' ? currentCursor() : a.around === 'point' ? { x: a.x, y: a.y } : { x: c.x, y: c.y - (c.z || 0) - (world.hero ? 55 : 30) };
       const r = a.r || 160;
       const b = o.display.bounds;
       const x = Math.round(p.x - b.x - r), y = Math.round(p.y - b.y - r);
@@ -223,7 +252,7 @@ function debounceDisplays() {
   displayTimer = setTimeout(() => {
     geo.set(displayList());
     syncOverlays();
-    world.onDisplaysChanged();
+    for (const w of Object.values(worlds)) w.onDisplaysChanged();
   }, 400);
 }
 
@@ -262,7 +291,7 @@ function initPayload(d) {
 function createOverlay(d) {
   const win = new BrowserWindow({
     ...overlayBounds(d),
-    title: 'Desktop Cat',
+    title: APP_NAME,
     transparent: true,
     frame: false,
     resizable: false,
@@ -290,7 +319,7 @@ function createOverlay(d) {
       spellcheck: false,
     },
   });
-  const o = { win, display: d, ready: false, interactive: false, ui: false, menuId: 0, rects: null, cursor: 'default' };
+  const o = { win, display: d, ready: false, interactive: false, ui: false, menuId: 0, rects: null, hudRects: null, cursor: 'default' };
   win.setAlwaysOnTop(true, 'screen-saver');
   if (isMac) win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   win.setIgnoreMouseEvents(true);
@@ -299,7 +328,7 @@ function createOverlay(d) {
     win.webContents.send('init', initPayload(o.display));
     o.ready = true;
     o.sentVer = -1;
-    o.ui = false; o.menuId = 0; o.rects = null; o.cursor = '';
+    o.ui = false; o.menuId = 0; o.rects = null; o.hudRects = null; o.cursor = '';
     o.interactive = true; setInteractive(o, false);
     if (!world.hidden) {
       win.showInactive();
@@ -351,7 +380,7 @@ function tickInner() {
   const t = Date.now();
   if (!world) return;
   // 60 Hz while the cursor drives things (dragging, tools), otherwise 30 Hz
-  const fast = !!(world.press || world.cat.mode === 'held' || world.cat.mode === 'air' || world.tool || anyMenuOpen());
+  const fast = !!(world.wantsFast() || anyMenuOpen());
   if (!fast && t - lastTick < 31) return;
   const gapSec = (t - lastTick) / 1000;
   lastTick = t;
@@ -365,7 +394,7 @@ function tickInner() {
     world.tick(dt);
   }
   if (t - lastSaveAt > 20000) save();
-  if (t - lastTrayAt > 1000) { lastTrayAt = t; updateTrayMenuIfNeeded(); }
+  if (t - lastTrayAt > 1000) { lastTrayAt = t; updateTrayMenuIfNeeded(); reminders.tick(); checkAnnouncementTimeout(); }
   if (world.hidden) return;
 
   // click-through: only grab the mouse over interactive things
@@ -377,10 +406,12 @@ function tickInner() {
     let want = o.ui && (!hookStatus.ok || !o.rects || inRects(o.rects, cur, 6));
     if (o.ui && t - o.uiAt > 60000) closeMenu(o); // safety net
     if (!want && world.press) want = o === pressOverlay;
+    const overPanel = here && o.hudRects && inRects(o.hudRects, cur, 4);
+    if (!want && overPanel) want = true;
     if (!want && here) want = world.isInteractive(cur);
     setInteractive(o, want);
     if (here) {
-      const style = o.ui ? 'default' : world.cursorStyle(cur);
+      const style = o.ui || overPanel ? 'default' : world.cursorStyle(cur);
       if (style !== o.cursor) { o.cursor = style; o.win.webContents.send('cursor', style); }
     }
   }
@@ -423,23 +454,21 @@ function anyMenuOpen() {
   return false;
 }
 
-// Is anything happening on this display (cat, ghost, toys, poop, cursor tool…)?
+// Is anything happening on this display (character, toys, enemies, cursor tool…)?
 function displayActive(b, cur) {
   const near = (p, m) => p && p.x >= b.x - m && p.x <= b.x + b.width + m && p.y >= b.y - m && p.y <= b.y + b.height + m;
-  const c = world.cat;
-  if (near({ x: c.x, y: c.y - c.z }, 220)) return true;
-  if (c.ghost && Date.now() - c.ghost.start < 8000 && near(c.ghost, 300)) return true;
   if (world.tool && near(cur, 80)) return true;
   if (near(cur, 0) && world.cursorBusy()) return true;
-  const E = world.ents;
-  for (const k of ['bowls', 'poops', 'scratches', 'files', 'yarns', 'boxes', 'posts', 'catnips']) for (const e of E[k]) if (near(e, 100)) return true;
-  return !!((E.bed && near(E.bed, 100)) || (E.grave && near(E.grave, 100)));
+  return world.activeIn(near);
 }
 
-function onWorldEvent(e) {
+function worldsKnown(name) { return name === 'cat' || name === 'ironman'; }
+
+function onWorldEvent(e, from) {
+  if (from && worlds[from] !== world && e.type !== 'notify') return; // the resting character stays silent
   if (e.type === 'sound') {
-    const o = overlayAt(e) || overlayAt(world.cat);
-    if (o && o.ready && world.settings.sound) o.win.webContents.send('sound', e);
+    const o = overlayAt(e) || [...overlays.values()][0];
+    if (o && o.ready && settings.sound) o.win.webContents.send('sound', e);
   } else if (e.type === 'fx') {
     broadcast('fx', e);
   } else if (e.type === 'notify') {
@@ -452,7 +481,83 @@ function onWorldEvent(e) {
 function save() {
   if (!world || !store) return;
   lastSaveAt = Date.now();
-  store.save(world.serialize());
+  store.save({
+    version: 2,
+    savedAt: Date.now(),
+    settings,
+    reminders: reminders.serialize(),
+    cat: worlds.cat.serialize(),
+    ironman: worlds.ironman.serialize(),
+  });
+}
+
+// ------------------------------------------------------------------ characters & reminders
+function setCharacter(name) {
+  if (!worldsKnown(name) || worlds[name] === world) return;
+  const ann = world.announcement;
+  world.deactivate();
+  world.clearAnnouncement();
+  settings.character = name;
+  world = worlds[name];
+  world.hidden = worlds.cat.hidden && worlds.ironman.hidden;
+  world.activate();
+  if (ann) world.announce(ann);
+  for (const o of overlays.values()) closeMenu(o);
+  trayDirty = true;
+  updateTrayIcon();
+  save();
+}
+
+const IRON_QUIPS = [
+  'Clock\'s ticking. I\'d do it myself, but someone has to keep the skies safe.',
+  'Suit\'s ready. Are you? Let\'s get it done.',
+  'I ran the numbers. Yep — it\'s definitely time.',
+  'Priority one. Everything else can wait.',
+  'Consider this your official call to action.',
+  'No pressure. Just the fate of your to-do list.',
+  'Systems green. Go time.',
+  'Mission parameters are clear. Execute.',
+];
+const CAT_QUIPS = [
+  'I sat right here so you wouldn\'t forget. 🐾',
+  'Do it now and I\'ll purr for you.',
+  'Then we can nap. Deal?',
+  'I\'m not moving until you do it.',
+  'Meow means now.',
+  'Go on. I\'ll watch your screen.',
+];
+
+function timeLabel(hhmm) {
+  const [h, m] = hhmm.split(':').map(Number);
+  const d = new Date(); d.setHours(h, m, 0, 0);
+  return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+}
+
+function onReminder(a) {
+  const iron = settings.character === 'ironman';
+  const when = timeLabel(a.time);
+  const quip = (iron ? IRON_QUIPS : CAT_QUIPS)[Math.floor(Math.random() * (iron ? IRON_QUIPS : CAT_QUIPS).length)];
+  const ann = {
+    id: a.id, text: a.text, time: when, character: settings.character, snoozed: !!a.snoozed,
+    header: iron ? 'MISSION BRIEFING' : `Meow! It's ${when}`,
+    quip,
+    speech: iron ? `Heads up. It's ${when}. ${a.text}. ${quip.replace(/[🐾]/g, '')}` : `It's ${when}. ${a.text}.`,
+  };
+  if (world.hidden) setHidden(false);
+  world.announce(ann);
+  onWorldEvent({ type: 'notify', title: iron ? `⏰ Mission: ${a.text}` : `⏰ ${a.text}`, body: `${when} — ${quip}` });
+}
+
+function resolveReminder(id, action, minutes) {
+  world.clearAnnouncement(id);
+  reminders.resolve(id, action, minutes);
+  save();
+}
+
+// don't leave a briefing up forever if nobody is at the computer
+function checkAnnouncementTimeout() {
+  const a = world.announcement;
+  if (a && Date.now() - a.start > 10 * 60 * 1000) resolveReminder(a.id, 'done');
 }
 
 function cachedDesktopItems() {
@@ -483,7 +588,8 @@ function openMenu(p, source, mods) {
     ctx: world.contextAt(p),
     native: source === 'hook',
     hook: hookStatus.ok,
-    hookNeedsPermission: isMac && !hookStatus.ok && world.settings.rightClick !== 'cat',
+    hookNeedsPermission: isMac && !hookStatus.ok && settings.rightClick !== 'cat',
+    character: settings.character,
     shortcut: shortcutLabel(),
     mods: mods || null,
   });
@@ -504,7 +610,7 @@ function closeMenu(o) {
 // ------------------------------------------------------------------ global hook
 function maybeStartHook() {
   if (process.env.DESKTOP_CAT_NO_HOOK) { hookStatus = { ok: false, reason: 'disabled' }; return; }
-  if (world.settings.rightClick === 'cat') { hookStatus = { ok: false, reason: 'not needed' }; return; }
+  if (settings.rightClick === 'cat') { hookStatus = { ok: false, reason: 'not needed' }; return; }
   if (isMac && !systemPreferences.isTrustedAccessibilityClient(false)) {
     hookStatus = { ok: false, reason: 'permission' };
     return;
@@ -513,7 +619,7 @@ function maybeStartHook() {
     mousedown(e) {
       const p = screen.getCursorScreenPoint();
       if (e.button === 2) {
-        const mode = world.settings.rightClick;
+        const mode = settings.rightClick;
         if (mode === 'cat') return;
         if (mode === 'alt' && !e.altKey) return;
         const o = overlayAt(p);
@@ -535,6 +641,7 @@ function maybeStartHook() {
         let closed = false;
         for (const o of overlays.values()) if (o.ui) { closeMenu(o); closed = true; }
         if (!closed && world.tool) world.command('stopTool');
+        if (!closed && world.announcement) resolveReminder(world.announcement.id, 'snooze', 5);
       }
     },
   });
@@ -556,26 +663,35 @@ function requestHookPermission() {
 function handleCmd(name, args) {
   args = args || {};
   switch (name) {
-    case 'home': openHome(); break;
+    case 'home': openHome(args.tab); break;
     case 'quit': app.quit(); break;
     case 'hide': setHidden(!world.hidden); break;
     case 'show': setHidden(false); break;
     case 'putAway': world.command('putAwayToys'); world.command('putAwayBed'); break;
     case 'enableHook': requestHookPermission(); break;
+    case 'character': setCharacter(args.name); break;
     case 'setting':
-      world.command('setting', args);
+      if (!(args.key in ALL_DEFAULTS) || args.key === 'character') break;
+      settings[args.key] = args.value;
+      for (const w of Object.values(worlds)) w.onSetting(args.key, args.value);
       if (args.key === 'launchAtLogin') applyLoginItem(!!args.value);
       if (args.key === 'rightClick') { if (args.value === 'cat') { Hook.stop(); hookStatus = { ok: false, reason: 'not needed' }; } else maybeStartHook(); }
       break;
+    case 'reminderAdd': reminders.add(args); save(); break;
+    case 'reminderUpdate': reminders.update(args.id, args.patch); save(); break;
+    case 'reminderRemove': if (world.announcement && world.announcement.id === args.id) world.clearAnnouncement(args.id); reminders.remove(args.id); save(); break;
+    case 'reminderTest': { const r = reminders.list.find((x) => x.id === args.id); if (r) onReminder({ id: '__test', text: r.text, time: r.time }); break; }
+    case 'reminderDone': if (args.id === '__test') world.clearAnnouncement('__test'); else resolveReminder(args.id, 'done'); break;
+    case 'reminderSnooze': if (args.id === '__test') world.clearAnnouncement('__test'); else resolveReminder(args.id, 'snooze', args.minutes || 5); break;
     default:
       world.command(name, args);
   }
   trayDirty = true;
-  if (['rename', 'setting', 'adopt', 'resetCat', 'quiet'].includes(name)) save();
+  if (['rename', 'setting', 'adopt', 'resetCat', 'quiet', 'character'].includes(name)) save();
 }
 
 function setHidden(h) {
-  world.hidden = !!h;
+  for (const w of Object.values(worlds)) w.hidden = !!h;
   for (const o of overlays.values()) {
     if (o.win.isDestroyed()) continue;
     if (h) { closeMenu(o); o.win.hide(); }
@@ -601,22 +717,39 @@ function setupIpc() {
       o.ui = false; o.menuId = 0; o.rects = null;
     }
   });
+  ipcMain.on('hud', (e, m) => {
+    const o = overlayFor(e.sender);
+    if (o) o.hudRects = m && Array.isArray(m.rects) && m.rects.length ? m.rects.filter((r) => r && typeof r.x === 'number').slice(0, 4) : null;
+  });
   ipcMain.on('cmd', (_e, m) => { if (m && typeof m.name === 'string') handleCmd(m.name, m.args); });
   ipcMain.handle('home:get', () => homePayload());
 }
 
 function homePayload() {
-  return { ...world.homeState(), hidden: world.hidden, hook: hookStatus, platform: process.platform, shortcut: shortcutLabel(), version: app.getVersion() };
+  return {
+    ...world.homeState(),
+    character: settings.character,
+    settings,
+    reminders: reminders.serialize(),
+    upcoming: reminders.upcoming(),
+    others: { cat: worlds.cat.info(), ironman: worlds.ironman.info() },
+    hidden: world.hidden, hook: hookStatus, platform: process.platform, shortcut: shortcutLabel(), version: app.getVersion(),
+  };
 }
 
 // ------------------------------------------------------------------ Cat Home window
-function openHome() {
-  if (homeWin && !homeWin.isDestroyed()) { homeWin.show(); homeWin.focus(); return; }
+function openHome(tab) {
+  if (homeWin && !homeWin.isDestroyed()) {
+    homeWin.show(); homeWin.focus();
+    if (tab) homeWin.webContents.send('home:tab', tab);
+    return;
+  }
+  pendingHomeTab = tab || null;
   homeWin = new BrowserWindow({
-    width: 480, height: 760, minWidth: 420, minHeight: 560,
-    title: 'Cat Home',
+    width: 500, height: 780, minWidth: 440, minHeight: 560,
+    title: APP_NAME,
     show: false,
-    backgroundColor: '#f7f5fc',
+    backgroundColor: settings.character === 'ironman' ? '#070d18' : '#f7f5fc',
     autoHideMenuBar: true,
     icon: fs.existsSync(ICON) ? ICON : undefined,
     ...(isMac ? { titleBarStyle: 'hiddenInset' } : {}),
@@ -626,18 +759,32 @@ function openHome() {
   homeWin.once('ready-to-show', () => {
     homeWin.show();
     if (isMac) app.focus({ steal: true });
+    if (pendingHomeTab) { homeWin.webContents.send('home:tab', pendingHomeTab); pendingHomeTab = null; }
   });
   homeWin.on('closed', () => { homeWin = null; });
 }
 
 // ------------------------------------------------------------------ tray
-let trayDirty = true, trayKey = '';
+let trayDirty = true, trayKey = '', trayIconFor = '';
+let pendingHomeTab = null;
+function trayImage() {
+  const f = fs.existsSync(TRAY_ICONS[settings.character]) ? TRAY_ICONS[settings.character] : ICON;
+  let img = fs.existsSync(f) ? nativeImage.createFromPath(f) : nativeImage.createEmpty();
+  if (!img.isEmpty()) img = img.resize({ width: isMac ? 18 : isWin ? 16 : 22, quality: 'best' });
+  return img;
+}
+
+function updateTrayIcon() {
+  if (!tray || trayIconFor === settings.character) return;
+  trayIconFor = settings.character;
+  try { tray.setImage(trayImage()); } catch (e) { /* ignore */ }
+}
+
 function setupTray() {
   try {
-    let img = fs.existsSync(ICON) ? nativeImage.createFromPath(ICON) : nativeImage.createEmpty();
-    if (!img.isEmpty()) img = img.resize({ width: isMac ? 18 : isWin ? 16 : 22, quality: 'best' });
-    tray = new Tray(img);
-    tray.setToolTip('Desktop Cat');
+    tray = new Tray(trayImage());
+    trayIconFor = settings.character;
+    tray.setToolTip(APP_NAME);
     tray.on('click', () => { if (!isMac) openHome(); });
     trayDirty = true;
     updateTrayMenuIfNeeded();
@@ -648,32 +795,41 @@ function setupTray() {
 
 function updateTrayMenuIfNeeded() {
   if (!tray) return;
-  const c = world.cat;
-  const key = [c.name, c.dead, world.hidden, world.quiet, world.settings.sound, Math.round(c.food / 10), c.moodText()].join('|');
+  const inf = world.info();
+  const iron = settings.character === 'ironman';
+  const key = [settings.character, inf.name, inf.dead, inf.status, world.hidden, world.quiet, settings.sound, reminders.list.length].join('|');
   if (!trayDirty && key === trayKey) return;
   trayDirty = false; trayKey = key;
   const cur = () => screen.getCursorScreenPoint();
   const tpl = [
-    { label: `${c.name} — ${c.moodText()}`, enabled: false },
+    { label: `${inf.name} — ${inf.status}`, enabled: false },
     { type: 'separator' },
-    { label: 'Open Cat Home…', click: () => openHome() },
-    { label: 'Open cat menu here', accelerator: MENU_SHORTCUT, click: () => openMenu(cur(), 'tray') },
+    { label: iron ? 'Open HQ…' : 'Open Cat Home…', click: () => openHome() },
+    { label: 'Open menu here', accelerator: MENU_SHORTCUT, click: () => openMenu(cur(), 'tray') },
+    { label: 'Reminders…', click: () => openHome('reminders') },
   ];
-  if (!c.dead) {
+  if (iron) {
+    tpl.push(
+      { label: 'Deploy enemy', submenu: [['Flying drone', 'drone'], ['Ground walker', 'walker'], ['Tank', 'tank'], ['Drone swarm', 'swarm'], ['Heavy mech (boss)', 'boss']].map(([l, k]) => ({ label: l, click: () => handleCmd('spawn', { kind: k, ...cur() }) })) },
+      { label: 'Patrol the screens', click: () => handleCmd('patrol') },
+      { label: 'Repair & recharge', click: () => { handleCmd('repair'); handleCmd('recharge'); } },
+    );
+  } else if (!inf.dead) {
     tpl.push(
       { label: 'Feed', submenu: ['fish', 'kibble', 'milk', 'chicken'].map((k) => ({ label: k[0].toUpperCase() + k.slice(1), click: () => handleCmd('feed', { kind: k, ...cur() }) })) },
-      { label: `Call ${c.name}`, click: () => handleCmd('call', cur()) },
+      { label: `Call ${inf.name}`, click: () => handleCmd('call', cur()) },
     );
   } else {
     tpl.push({ label: 'Adopt a new kitten', click: () => handleCmd('adopt') });
   }
   tpl.push(
     { type: 'separator' },
-    { label: 'Quiet time (do not disturb)', type: 'checkbox', checked: world.quiet, click: () => handleCmd('quiet') },
-    { label: 'Hide cat', type: 'checkbox', checked: world.hidden, click: () => handleCmd('hide') },
-    { label: 'Sounds', type: 'checkbox', checked: !!world.settings.sound, click: (mi) => handleCmd('setting', { key: 'sound', value: mi.checked }) },
+    { label: 'Character', submenu: [['Cat', 'cat'], ['Iron Man', 'ironman']].map(([l, k]) => ({ label: l, type: 'radio', checked: settings.character === k, click: () => handleCmd('character', { name: k }) })) },
+    { label: iron ? 'Stand-by mode' : 'Quiet time (do not disturb)', type: 'checkbox', checked: world.quiet, click: () => handleCmd('quiet') },
+    { label: iron ? 'Hide Iron Man' : 'Hide cat', type: 'checkbox', checked: world.hidden, click: () => handleCmd('hide') },
+    { label: 'Sounds', type: 'checkbox', checked: !!settings.sound, click: (mi) => handleCmd('setting', { key: 'sound', value: mi.checked }) },
     { type: 'separator' },
-    { label: 'Quit Desktop Cat', click: () => app.quit() },
+    { label: `Quit ${APP_NAME}`, click: () => app.quit() },
   );
   tray.setContextMenu(Menu.buildFromTemplate(tpl));
 }
@@ -686,11 +842,11 @@ function applyLoginItem(on) {
       app.setLoginItemSettings(portable ? { openAtLogin: !!on, path: portable } : { openAtLogin: !!on });
     } else if (isLinux) {
       const dir = path.join(os.homedir(), '.config', 'autostart');
-      const file = path.join(dir, 'desktop-cat.desktop');
+      const file = path.join(dir, 'desktop-buddies.desktop');
       if (on) {
         const exec = process.env.APPIMAGE || process.execPath;
         fs.mkdirSync(dir, { recursive: true });
-        fs.writeFileSync(file, `[Desktop Entry]\nType=Application\nName=Desktop Cat\nExec="${exec}"\nX-GNOME-Autostart-enabled=true\n`);
+        fs.writeFileSync(file, `[Desktop Entry]\nType=Application\nName=${APP_NAME}\nExec="${exec}" --ozone-platform=x11\nX-GNOME-Autostart-enabled=true\n`);
       } else if (fs.existsSync(file)) fs.unlinkSync(file);
     }
   } catch (e) { console.warn('[login item]', e.message); }

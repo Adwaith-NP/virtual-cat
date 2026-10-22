@@ -1,8 +1,8 @@
 'use strict';
 const { contextBridge, ipcRenderer } = require('electron');
 
-const IN = new Set(['init', 'state', 'fx', 'sound', 'menu:open', 'menu:close', 'cursor', 'home:state']);
-const OUT = new Set(['ready', 'pointer', 'context', 'ui', 'cmd']);
+const IN = new Set(['init', 'state', 'fx', 'sound', 'menu:open', 'menu:close', 'cursor', 'home:state', 'home:tab']);
+const OUT = new Set(['ready', 'pointer', 'context', 'ui', 'hud', 'cmd']);
 
 contextBridge.exposeInMainWorld('catAPI', {
   on(channel, fn) {

@@ -1,15 +1,15 @@
 {
-  "name": "desktop-cat",
-  "productName": "Desktop Cat",
-  "version": "1.0.0",
-  "description": "A little white cat that lives on your desktop.",
+  "name": "desktop-buddies",
+  "productName": "Desktop Buddies",
+  "version": "2.0.0",
+  "description": "Desktop companions \u2014 a little white cat and an armored hero \u2014 that live on your screen.",
   "main": "src/main/main.js",
-  "author": "Desktop Cat",
+  "author": "Desktop Buddies",
   "license": "MIT",
   "scripts": {
     "start": "electron .",
     "dev": "electron . --dev",
-    "test": "node dev/sim-test.js && node dev/geo-test.js",
+    "test": "node dev/sim-test.js && node dev/geo-test.js && node dev/iron-test.js",
     "icon": "electron scripts/make-icon.js",
     "dist": "electron-builder",
     "dist:mac": "electron-builder --mac",
@@ -17,8 +17,8 @@
     "dist:linux": "electron-builder --linux"
   },
   "build": {
-    "appId": "app.desktopcat.pet",
-    "productName": "Desktop Cat",
+    "appId": "app.desktopbuddies",
+    "productName": "Desktop Buddies",
     "directories": {
       "output": "dist",
       "buildResources": "build"
@@ -26,6 +26,8 @@
     "files": [
       "src/**/*",
       "build/icon.png",
+      "build/tray-cat.png",
+      "build/tray-ironman.png",
       "package.json"
     ],
     "asarUnpack": [
@@ -52,7 +54,7 @@
       "icon": "build/icon.png",
       "extendInfo": {
         "LSUIElement": true,
-        "NSAppleEventsUsageDescription": "Desktop Cat listens for right-clicks to open its menu."
+        "NSAppleEventsUsageDescription": "Desktop Buddies listens for right-clicks to open its menu."
       }
     },
     "win": {
@@ -98,7 +100,7 @@
       ],
       "icon": "build/icon.png",
       "category": "Game",
-      "maintainer": "Desktop Cat",
+      "maintainer": "Desktop Buddies",
       "executableArgs": [
         "--ozone-platform=x11"
       ]

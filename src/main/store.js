@@ -3,15 +3,17 @@ const fs = require('fs');
 const path = require('path');
 
 // Tiny JSON save file with an atomic write and a backup copy.
+// `legacy` lists older save files to import once (e.g. from the "Desktop Cat" days).
 class Store {
-  constructor(dir) {
+  constructor(dir, name, legacy) {
     this.dir = dir;
-    this.file = path.join(dir, 'desktop-cat-save.json');
+    this.file = path.join(dir, name || 'desktop-buddies-save.json');
     this.backup = this.file + '.bak';
+    this.legacy = legacy || [];
   }
 
   load() {
-    for (const f of [this.file, this.backup]) {
+    for (const f of [this.file, this.backup, ...this.legacy.flatMap((l) => [l, l + '.bak'])]) {
       try {
         const data = JSON.parse(fs.readFileSync(f, 'utf8'));
         if (data && typeof data === 'object') return data;

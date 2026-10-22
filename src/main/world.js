@@ -390,6 +390,7 @@ class Cat {
   // ------------------------------------------------------------ brain
   choose() {
     const w = this.w, s = this.s;
+    if (w.announcement && !this.dead) return [this.taskAnnounce(), 'announce', 96];
     if (w.quiet) return [this.taskQuiet(), 'quiet', 95];
     if (this.health <= 0) return [this.taskDie(), 'die', 99];
     if (this.health < 30) return [this.taskWeak(), 'weak', 70];
@@ -1312,6 +1313,32 @@ class Cat {
     yield* this.taskStretch();
   }
 
+  * taskAnnounce() {
+    const w = this.w, s = this.s;
+    const a = w.announcement;
+    if (!a) return;
+    const d = w.geo.primary;
+    const spot = { x: d.work.x + d.work.width / 2, y: d.work.y + d.work.height * 0.62 };
+    this.think('bang', true, 1.5);
+    this.meow('long');
+    yield* this.walkTo(spot, { speed: 'run', expr: 'focused', timeout: 15 });
+    a.arrived = true;
+    w.dirty();
+    this.facing = 1;
+    this.setPose('sitFront', 'begging');
+    this.look = { ref: 'cursor' };
+    let t = 0;
+    while (w.announcement === a) {
+      t += this.dt;
+      if (t > 6 && Math.random() < 0.004) this.meow('short');
+      yield;
+    }
+    this.setPose('sitFront', 'happy');
+    this.think('heart', false, 2);
+    this.meow('happy');
+    yield* this.wait(1.5);
+  }
+
   * taskArrive() {
     const w = this.w, s = this.s;
     const d = w.geo.primary;
@@ -1351,11 +1378,13 @@ function isNight() {
 
 // ======================================================================= World
 class World {
-  constructor({ geo, data, desktopItems, emit }) {
+  constructor({ geo, data, desktopItems, emit, settings }) {
+    this.character = 'cat';
     this.geo = geo;
     this.emit = emit || (() => {});
     this.desktopItems = desktopItems || (() => []);
-    this.settings = { ...DEFAULT_SETTINGS, ...((data && data.settings) || {}) };
+    this.settings = settings || { ...DEFAULT_SETTINGS, ...((data && data.settings) || {}) };
+    this.announcement = null;
     this.counters = { ...DEFAULT_COUNTERS, ...((data && data.counters) || {}) };
     this.memorial = (data && data.memorial) || [];
     this.ents = { bowls: [], poops: [], scratches: [], files: [], yarns: [], boxes: [], posts: [], catnips: [], bed: null, grave: null };
@@ -1938,17 +1967,68 @@ class World {
       case 'rename': if (a.name && String(a.name).trim()) { c.name = String(a.name).trim().slice(0, 24); this.dirty(); } break;
       case 'resetCat': this.memorial.push({ name: c.name, born: c.born, died: now(), palette: c.palette, eyes: c.eyes, cause: 'rehomed' }); this.ents.grave = null; this.adopt(); break;
       case 'setting':
-        if (a.key in DEFAULT_SETTINGS) {
-          this.settings[a.key] = a.value;
-          if (a.key === 'palette') c.palette = a.value;
-          if (a.key === 'eyes') c.eyes = a.value;
-          if (a.key === 'size') this.placeCatOnScreen(false);
-          this.dirty();
-        }
+        if (a.key in DEFAULT_SETTINGS) { this.settings[a.key] = a.value; this.onSetting(a.key, a.value); }
         break;
       default:
         break;
     }
+  }
+
+  // ------------------------------------------------------------ shared interface (see main.js)
+  announce(a) {
+    this.announcement = { ...a, start: now() };
+    const c = this.cat;
+    if (c.mode === 'held') c.release();
+    if (c.mode === 'task' && !c.dead) c.run(c.taskAnnounce(), 'announce', 96);
+    this.dirty();
+  }
+
+  clearAnnouncement(id) {
+    if (this.announcement && (id == null || this.announcement.id === id)) { this.announcement = null; this.dirty(); }
+  }
+
+  activate() {
+    const c = this.cat;
+    if (!c.dead) { c.run(c.taskArrive(), 'arrive', 20); }
+    this.dirty();
+  }
+
+  deactivate() {
+    const c = this.cat;
+    this.setTool(null);
+    this.press = null;
+    c.pending = null;
+    if (c.task) { try { c.task.return(); } catch (e) { /* */ } }
+    c.task = null; c.taskName = null; c.taskPrio = 0;
+    c.resetTransient();
+    if (c.mode === 'held' || c.mode === 'air') { c.mode = 'task'; c.z = 0; c.rot = 0; }
+  }
+
+  onSetting(key, value) {
+    if (key === 'palette') this.cat.palette = value;
+    if (key === 'eyes') this.cat.eyes = value;
+    if (key === 'size') this.placeCatOnScreen(false);
+    this.dirty();
+  }
+
+  wantsFast() {
+    const c = this.cat;
+    return !!(this.press || c.mode === 'held' || c.mode === 'air' || this.tool);
+  }
+
+  activeIn(near) {
+    const c = this.cat;
+    if (near({ x: c.x, y: c.y - c.z }, 220)) return true;
+    if (c.ghost && Date.now() - c.ghost.start < 8000 && near(c.ghost, 300)) return true;
+    if (this.announcement) return true;
+    const E = this.ents;
+    for (const k of ['bowls', 'poops', 'scratches', 'files', 'yarns', 'boxes', 'posts', 'catnips']) for (const e of E[k]) if (near(e, 100)) return true;
+    return !!((E.bed && near(E.bed, 100)) || (E.grave && near(E.grave, 100)));
+  }
+
+  info() {
+    const c = this.cat;
+    return { name: c.name, status: c.moodText(), dead: c.dead, food: c.food };
   }
 
   contextAt(p) {
@@ -2045,6 +2125,9 @@ class World {
     return {
       t: now(),
       s,
+      character: 'cat',
+      announce: this.announcement,
+      primaryWork: this.geo.primary ? this.geo.primary.work : null,
       cat: {
         x: c.x, y: c.y, z: c.z, facing: c.facing, dist: c.dist, speed: c.speed,
         pose: c.pose, poseStart: c.poseStart, expr: c.expr, action: c.action, look,
@@ -2064,12 +2147,14 @@ class World {
       quiet: this.quiet,
       sound: this.settings.sound,
       volume: this.settings.volume,
+      voice: this.settings.voice !== false,
     };
   }
 
   homeState() {
     const c = this.cat;
     return {
+      character: 'cat',
       cat: {
         name: c.name, born: c.born, died: c.died, dead: c.dead, palette: c.palette, eyes: c.eyes, mood: c.moodText(),
         pose: c.pose, expr: c.expr, sleeping: c.sleeping,

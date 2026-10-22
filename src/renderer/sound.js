@@ -150,7 +150,88 @@
     sniff: () => { for (let i = 0; i < 3; i++) hiss('highpass', 2000, 0.8, 0.05, 0.12, i * 0.12); },
     sad: () => { [659, 523, 440, 330].forEach((f, i) => blip('sine', f, f * 0.99, 0.45, 0.14, i * 0.42)); },
     adopt: () => { [523, 659, 784, 1046].forEach((f, i) => blip('sine', f, f, 0.18, 0.12, i * 0.1)); },
+
+    // ---- armored hero
+    repulsor: () => { blip('sine', 900, 2600, 0.07, 0.12); hiss('bandpass', 1800, 0.9, 0.22, 0.32, 0.05, 700); blip('sine', 320, 70, 0.18, 0.3, 0.05); },
+    charge: () => { blip('sawtooth', 260, 1500, 0.42, 0.08); blip('sine', 520, 3000, 0.42, 0.06); },
+    chargeLong: () => { blip('sawtooth', 160, 1200, 0.7, 0.09); blip('sine', 320, 2400, 0.7, 0.07); },
+    blast: () => { hiss('lowpass', 1100, 0.8, 0.55, 0.55); blip('sine', 140, 38, 0.45, 0.5); hiss('highpass', 3000, 0.7, 0.2, 0.2); },
+    missile: () => { hiss('bandpass', 600, 1.1, 0.38, 0.22, 0, 2600); blip('square', 220, 120, 0.05, 0.05); },
+    boom: () => { hiss('lowpass', 700, 0.8, 0.6, 0.5); blip('sine', 95, 30, 0.5, 0.5); },
+    boomBig: () => { hiss('lowpass', 520, 0.8, 1.2, 0.6); blip('sine', 70, 22, 1.0, 0.6); for (let i = 0; i < 4; i++) hiss('bandpass', 1500, 1, 0.08, 0.15, 0.15 + i * 0.12); },
+    unibeam: () => {
+      const c = ctx(); if (!c) return;
+      const t = c.currentTime + 0.01;
+      const out = gain(0);
+      out.gain.setValueAtTime(0.0001, t); out.gain.linearRampToValueAtTime(0.3, t + 0.08);
+      out.gain.setValueAtTime(0.3, t + 1.0); out.gain.exponentialRampToValueAtTime(0.0001, t + 1.25);
+      const f = filt('bandpass', 900, 1.5);
+      f.frequency.setValueAtTime(600, t); f.frequency.linearRampToValueAtTime(1800, t + 1.1);
+      for (const fr of [180, 271, 362]) { const o = c.createOscillator(); o.type = 'sawtooth'; o.frequency.value = fr; o.connect(f); o.start(t); o.stop(t + 1.3); }
+      const n = noise(); const ng = gain(0.5); n.connect(ng); ng.connect(f); n.start(t); n.stop(t + 1.3);
+      f.connect(out); out.connect(master);
+    },
+    laser: () => blip('square', 1500, 260, 0.14, 0.07),
+    shellFire: () => { blip('sine', 150, 50, 0.2, 0.35); hiss('lowpass', 900, 0.7, 0.15, 0.25); },
+    clank: () => { hiss('bandpass', 2600, 7, 0.06, 0.09); blip('triangle', 640, 300, 0.06, 0.05); blip('sine', 120, 60, 0.07, 0.12); },
+    landing: () => { blip('sine', 110, 32, 0.4, 0.55); hiss('lowpass', 600, 0.8, 0.35, 0.4); hiss('bandpass', 2400, 6, 0.12, 0.12, 0.02); },
+    thrustOn: () => hiss('bandpass', 500, 0.8, 0.5, 0.25, 0, 1800),
+    alert: () => { blip('square', 880, 880, 0.12, 0.06); blip('square', 660, 660, 0.12, 0.06, 0.16); blip('square', 880, 880, 0.12, 0.06, 0.32); },
+    hudBeep: () => { blip('sine', 1500, 1500, 0.05, 0.08); blip('sine', 2100, 2100, 0.06, 0.07, 0.07); },
+    lock: () => { [1200, 1500, 1900].forEach((f, i) => blip('sine', f, f, 0.05, 0.08, i * 0.06)); },
+    hit: () => { blip('sine', 1900, 1500, 0.22, 0.12); hiss('highpass', 3000, 0.7, 0.05, 0.2); },
+    reboot: () => { blip('sine', 200, 1300, 0.6, 0.12); [1300, 1700].forEach((f, i) => blip('sine', f, f, 0.07, 0.08, 0.65 + i * 0.1)); },
+    powerDown: () => blip('sawtooth', 1200, 80, 0.9, 0.1),
+    spawn: () => { blip('sine', 900, 200, 0.3, 0.1); hiss('bandpass', 1200, 2, 0.25, 0.1); },
+    bossSpawn: () => { blip('sawtooth', 90, 70, 1.1, 0.18); blip('sawtooth', 135, 100, 1.1, 0.12); },
+    reminder: () => { [988, 1319, 1568].forEach((f, i) => blip('sine', f, f, 0.18, 0.12, i * 0.13)); },
   };
+
+  // looping engine sounds (thrusters): level 0..1
+  const loops = {};
+  function setLoop(name, level) {
+    if (!enabled) level = 0;
+    const c = level > 0.01 ? ctx() : ac;
+    if (!c) return;
+    let L = loops[name];
+    if (level > 0.01 && !L) {
+      const n = noise();
+      const bp = filt('bandpass', 750, 0.7);
+      const lp = filt('lowpass', 2600, 0.7);
+      const out = gain(0);
+      n.connect(bp); bp.connect(lp); lp.connect(out); out.connect(master);
+      n.start();
+      L = loops[name] = { n, out, bp };
+    }
+    if (!L) return;
+    const t = c.currentTime;
+    L.out.gain.cancelScheduledValues(t);
+    L.out.gain.setTargetAtTime(level * 0.22, t, 0.12);
+    L.bp.frequency.setTargetAtTime(600 + level * 900, t, 0.2);
+    if (level <= 0.01) {
+      clearTimeout(L.stopTimer);
+      L.stopTimer = setTimeout(() => { if (loops[name] === L && L.out.gain.value < 0.01) { try { L.n.stop(); } catch (e) { /* */ } delete loops[name]; } }, 900);
+    } else clearTimeout(L.stopTimer);
+  }
+
+  // Read a reminder aloud in the character's voice.
+  function speak(text, character) {
+    try {
+      const synth = root.speechSynthesis;
+      if (!synth || !enabled) return;
+      synth.cancel();
+      const u = new root.SpeechSynthesisUtterance(text);
+      const voices = synth.getVoices();
+      const en = voices.filter((v) => /^en/i.test(v.lang));
+      const iron = character === 'ironman';
+      const prefer = iron ? /daniel|alex|aaron|arthur|david|guy|george|male|fred/i : /samantha|karen|zira|aria|female|victoria|moira|tessa/i;
+      u.voice = en.find((v) => prefer.test(v.name)) || en[0] || null;
+      u.pitch = iron ? 0.85 : 1.45;
+      u.rate = iron ? 1.02 : 1.05;
+      u.volume = Math.min(1, volume * 1.6);
+      synth.speak(u);
+    } catch (e) { /* speech not available */ }
+  }
 
   function play(name) {
     if (!enabled || volume <= 0) return;
@@ -192,8 +273,8 @@
     enabled = !!on;
     volume = vol == null ? volume : vol;
     if (master) master.gain.value = volume;
-    if (!enabled) setPurr(false);
+    if (!enabled) { setPurr(false); for (const k of Object.keys(loops)) setLoop(k, 0); }
   }
 
-  root.CatSound = { play, setPurr, configure, names: Object.keys(SFX) };
+  root.CatSound = { play, setPurr, setLoop, speak, configure, names: Object.keys(SFX) };
 })(typeof window !== 'undefined' ? window : globalThis);
