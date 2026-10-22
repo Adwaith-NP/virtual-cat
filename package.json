@@ -2,7 +2,7 @@
   "name": "desktop-buddies",
   "productName": "Desktop Buddies",
   "version": "2.1.0",
-  "description": "Desktop companions \u2014 a little white cat and an armored hero \u2014 that live on your screen.",
+  "description": "Desktop companions — a little white cat and an armored hero — that live on your screen.",
   "main": "src/main/main.js",
   "author": "Desktop Buddies",
   "license": "MIT",
@@ -52,6 +52,8 @@
         }
       ],
       "icon": "build/icon.png",
+      "identity": "-",
+      "hardenedRuntime": false,
       "extendInfo": {
         "LSUIElement": true,
         "NSAppleEventsUsageDescription": "Desktop Buddies listens for right-clicks to open its menu."

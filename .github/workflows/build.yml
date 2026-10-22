@@ -1,6 +1,6 @@
-# Builds Desktop Cat for Windows, macOS and Linux on their native runners.
-# Push a tag like v1.0.0 (or run it manually) and download the installers
-# from the workflow run's "Artifacts" section.
+# Builds Desktop Buddies for Windows, macOS and Linux on their native runners.
+# Run it manually to get the installers from the run's "Artifacts", or push a
+# tag like v2.1.0 to also publish them on a GitHub Release.
 name: build
 
 on:
@@ -33,7 +33,7 @@ jobs:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
       - uses: actions/upload-artifact@v4
         with:
-          name: desktop-cat-${{ matrix.os }}
+          name: desktop-buddies-${{ matrix.os }}
           path: |
             dist/*.exe
             dist/*.dmg
@@ -41,3 +41,32 @@ jobs:
             dist/*.AppImage
             dist/*.deb
           if-no-files-found: error
+
+  # On a version tag: attach every installer that was built to a GitHub Release.
+  release:
+    needs: build
+    if: ${{ !cancelled() && startsWith(github.ref, 'refs/tags/v') }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: installers
+          merge-multiple: true
+      - run: ls -la installers
+      - uses: softprops/action-gh-release@v2
+        with:
+          name: Desktop Buddies ${{ github.ref_name }}
+          files: installers/*
+          fail_on_unmatched_files: true
+          body: |
+            A little white cat and Iron Man that live on your desktop.
+
+            **Windows** — download `Desktop.Buddies.Setup.*.exe` and run it. The app isn't signed, so SmartScreen asks first: *More info → Run anyway*. (`*-portable.exe` runs without installing.)
+
+            **macOS** — download the `.dmg` (`arm64` for Apple Silicon M1/M2/M3/M4, the other one for Intel Macs) and drag the app to Applications. The first time, macOS blocks it because it isn't notarized: open *System Settings → Privacy & Security* and click *Open Anyway*.
+
+            **Linux** — Ubuntu/Debian: `sudo apt install ./desktop-buddies_*_amd64.deb`. Any distro: `chmod +x Desktop.Buddies-*.AppImage` and run it (needs `libfuse2`). A compositor is required for transparency.
+
+            Right-click anywhere (or on your buddy) for the menu. See the README for everything else.

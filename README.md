@@ -81,10 +81,12 @@ npm run dist:win     # .exe installer + portable .exe (on Windows)
 npm run dist:linux   # .AppImage + .deb (on Linux)
 ```
 
-The GitHub Actions workflow (`.github/workflows/build.yml`) builds all three:
-push a tag like `v2.0.0` or run it manually, then download the installers from
-the run's *Artifacts*. Builds are unsigned (macOS: right-click → *Open* the first
-time; Windows: SmartScreen may ask to confirm).
+The GitHub Actions workflow (`.github/workflows/build.yml`) builds all three.
+Push a tag like `v2.1.0` and the installers are published on the repository's
+**Releases** page (running the workflow manually puts them in the run's
+*Artifacts* instead). Builds aren't signed with a developer certificate
+(macOS: *System Settings → Privacy & Security → Open Anyway* the first time;
+Windows: SmartScreen → *More info → Run anyway*).
 
 ## Controls
 
