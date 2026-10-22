@@ -194,3 +194,33 @@ html, body {
 .diag-row { display: flex; justify-content: space-between; gap: 14px; padding: 1.5px 0; border-top: 1px solid rgba(110, 225, 255, 0.12); }
 .diag-row span { color: rgba(143, 240, 255, 0.7); }
 .diag-row b { color: #ffffff; font-weight: 700; }
+
+/* ------------------------------------------------------------ nuke countdown / army battle bar */
+.banner {
+  position: fixed; left: 0; top: 0; z-index: 490000; pointer-events: none;
+  min-width: 360px; padding: 10px 22px 12px; text-align: center;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  color: #e9fbff; background: rgba(6, 18, 30, 0.86);
+  border: 1px solid rgba(110, 225, 255, 0.75); border-radius: 3px;
+  box-shadow: 0 0 30px rgba(60, 200, 255, 0.3);
+  animation: hudIn 0.4s ease-out;
+}
+.banner .b1 { font-size: 15px; font-weight: 800; letter-spacing: 4px; color: #ffd166; }
+.banner .b2 { display: flex; justify-content: center; gap: 22px; margin-top: 4px; font-size: 11.5px; letter-spacing: 1.5px; color: #9fe7ff; }
+.banner .bbar { height: 5px; margin-top: 8px; background: rgba(110, 225, 255, 0.15); }
+.banner .bfill { height: 100%; background: #5ee0ff; box-shadow: 0 0 8px #5ee0ff; transition: width 0.3s; }
+.banner[data-kind="nuke"] {
+  background: rgba(40, 0, 0, 0.88); border-color: #ff3b3b; box-shadow: 0 0 40px rgba(255, 30, 30, 0.6);
+  animation: hudIn 0.3s ease-out, alarm 0.7s steps(2) infinite;
+}
+.banner[data-kind="nuke"] .b1 { color: #ffdd33; font-size: 22px; }
+.banner[data-kind="nuke"] .b2 { color: #ff9a9a; font-size: 16px; font-weight: 800; }
+@keyframes alarm { 50% { border-color: #ffdd33; box-shadow: 0 0 60px rgba(255, 60, 30, 0.9); } }
+
+/* ------------------------------------------------------------ army launch dialog */
+.armydlg { width: 400px; }
+.armydlg .dlg-label { margin-top: 12px; font-size: 10.5px; letter-spacing: 3px; color: #ffd166; }
+.armydlg .dlg-row { display: flex; gap: 6px; margin-top: 6px; }
+.armydlg .dlg-row button { flex: 1; padding: 8px 4px; }
+.armydlg .dlg-row button.on { background: rgba(90, 220, 255, 0.28); color: #fff; border-color: #5ee0ff; box-shadow: 0 0 12px rgba(90, 220, 255, 0.35); }
+.armydlg .brief-quip { margin-top: 12px; }

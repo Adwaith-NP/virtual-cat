@@ -115,6 +115,92 @@ for (let i = 0; i < sec(8); i++) cat.tick(DT);
 assert(cat.announcement.arrived, 'cat should reach the middle too');
 console.log('cat briefing at:', cat.cat.x.toFixed(0), cat.cat.y.toFixed(0), cat.cat.pose);
 
+// ---- army attack: the Iron Legion joins, wins, then leaves
+w.command('quiet', { value: false });
+w.command('army', { side: 'left', size: 'medium', x: 800, y: 500 });
+{
+  let t = 0, maxAllies = 0, maxEnemies = 0;
+  while ((w.army || w.allies.length) && t < sec(240)) {
+    step(1); t++;
+    maxAllies = Math.max(maxAllies, w.allies.length);
+    maxEnemies = Math.max(maxEnemies, w.enemies.length);
+    if (w.hero.armor < 30) w.hero.armor = 80;
+    for (const a of w.allies) if (a.armor < 25) a.armor = 70;
+  }
+  console.log(`army: done=${!w.army} in ${(t / 60).toFixed(1)}s, peak enemies=${maxEnemies}, legion=${maxAllies}, allies left=${w.allies.length}, armiesWon=${w.counters.armiesWon}`);
+  assert(!w.army, 'army should be defeated');
+  assert.strictEqual(maxAllies, 3, 'a medium army calls 3 suits');
+  assert.strictEqual(w.allies.length, 0, 'the Legion flies home afterwards');
+}
+
+// ---- legendary battle: 1000 attackers, never more than 7 Legion suits
+{
+  w.command('army', { side: 'both', size: 'legendary', x: 800, y: 500 });
+  assert(w.army && w.army.total === 1000, 'legendary army has 1000 units');
+  let t = 0, peakE = 0, peakA = 0;
+  const k0 = w.counters.kills;
+  while ((w.army || w.allies.length) && t < sec(600)) {
+    w.setCursor(cur, DT); w.tick(DT); t++;
+    peakE = Math.max(peakE, w.enemies.length); peakA = Math.max(peakA, w.allies.length);
+  }
+  console.log(`legendary: done=${!w.army} in ${(t / 60).toFixed(0)}s, kills=${w.counters.kills - k0}, peak enemies=${peakE}, legion=${peakA}`);
+  assert(!w.army, 'the legendary army should be beaten');
+  assert(w.counters.kills - k0 >= 1000, 'all 1000 destroyed');
+  assert(peakA <= 7, 'at most 7 Legion suits');
+  assert(peakE <= 45, 'front line stays manageable');
+}
+
+// ---- nuke on screen 1 with two screens: he escapes to screen 2 and gets thrown by the wave
+function runNuke(world, gz, label) {
+  const hh = world.hero;
+  hh.power = 100; hh.armor = 100;
+  for (const e of [...world.enemies]) world.kill(e, true);
+  const g1 = geo.displays[0];
+  for (let i = 0; i < 4; i++) world.spawn(i % 2 ? 'walker' : 'drone', { x: g1.work.x + 200 + i * 250, y: g1.work.y + 300 });
+  if (geo.displays[1]) world.spawn('drone', { x: geo.displays[1].work.x + 400, y: 300 });
+  for (let i = 0; i < 30; i++) { world.setCursor(cur, DT); world.tick(DT); }
+  const onTarget = world.enemies.filter((e) => e.x < g1.bounds.x + g1.bounds.width).length;
+  world.command('nuke', gz);
+  assert(world.nuke, 'nuke started');
+  let thrown = false, escaped = false, t = 0, killsBefore = world.counters.kills;
+  while (world.nuke && t < sec(25)) {
+    world.setCursor(cur, DT); world.tick(DT); t++;
+    if (hh.mode === 'thrown') thrown = true;
+    if (!world.nuke || !world.nuke.detonated) { const d = geo.displayAt({ x: hh.x, y: hh.y - 40 }); if (d && d.id !== g1.id) escaped = true; }
+    for (const k of ['x', 'y', 'armor']) assert(Number.isFinite(hh[k]), 'NaN ' + k);
+    if (hh.mode !== 'held') assert(geo.inAny({ x: hh.x, y: hh.y - 40 }, -5), `${label}: hero off screen ${hh.x.toFixed(0)},${hh.y.toFixed(0)} ${hh.mode}`);
+  }
+  for (let i = 0; i < sec(10); i++) { world.setCursor(cur, DT); world.tick(DT); }
+  const leftOnTarget = world.enemies.filter((e) => e.x < g1.bounds.x + g1.bounds.width).length;
+  console.log(`${label}: on-target enemies ${onTarget}→${leftOnTarget}, escaped=${escaped}, thrown=${thrown}, hero ${hh.mode}/${hh.pose} armor=${hh.armor.toFixed(0)}, kills +${world.counters.kills - killsBefore}`);
+  assert.strictEqual(leftOnTarget, 0, 'everything on the target screen is destroyed');
+  assert(thrown, 'the shockwave throws the hero');
+  assert(hh.mode === 'ground' || hh.mode === 'air', 'hero recovers');
+  return escaped;
+}
+assert(runNuke(w, { x: 700, y: 600 }, 'nuke (2 screens)'), 'hero escapes to the other screen');
+{
+  const geo1 = new Geo();
+  geo1.set([geo.displays[0]].map((d) => ({ id: d.id, bounds: d.bounds, workArea: d.work, primary: true })));
+  const w1 = new IronWorld({ geo: geo1, data: null, settings, emit: () => {} });
+  w1.activate();
+  for (let i = 0; i < sec(6); i++) { w1.setCursor(cur, DT); w1.tick(DT); }
+  const old = geo; // runNuke reads `geo` for display checks
+  global.geoSave = old;
+  runNukeSingle(w1, geo1);
+}
+function runNukeSingle(world, g) {
+  const hh = world.hero;
+  world.spawn('walker', { x: 900, y: 600 });
+  world.command('nuke', { x: 500, y: 600 });
+  let thrown = false, t = 0;
+  while (world.nuke && t < sec(25)) { world.setCursor(cur, DT); world.tick(DT); t++; if (hh.mode === 'thrown') thrown = true; assert(g.inAny({ x: hh.x, y: hh.y - 40 }, -5), 'off screen (single)'); }
+  for (let i = 0; i < sec(10); i++) { world.setCursor(cur, DT); world.tick(DT); }
+  console.log(`nuke (1 screen): enemies=${world.enemies.length}, thrown=${thrown}, hero x=${hh.x.toFixed(0)} ${hh.mode}`);
+  assert.strictEqual(world.enemies.length, 0);
+  assert(thrown);
+}
+
 const saved = JSON.parse(JSON.stringify(w.serialize()));
 const w2 = new IronWorld({ geo, data: saved, settings, emit: () => {} });
 for (let i = 0; i < 60; i++) w2.tick(DT);

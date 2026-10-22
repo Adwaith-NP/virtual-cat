@@ -35,8 +35,11 @@ use; the character belongs to Marvel. If you publish this widely, rename him.)
 | **Enemies** | Right-click → *Deploy enemy* drops a **flying drone**, **ground walker**, **tank**, **drone swarm** or a **heavy mech boss** exactly where you clicked. Ground units fall to the floor; flyers swarm around him. They shoot back (lasers, arcing shells, homing missiles, a charging beam). |
 | **Weapons** | **Repulsor** palm blasts, **double hand blast** at close range, homing **micro-missiles** from the shoulders, the **unibeam** from the arc reactor (cuts through a whole line), and a punch when they get too close. He also dodges incoming fire. |
 | **Attack here** | Right-click any spot → *Attack here* → fire that weapon at it. Click an enemy to lock it as the priority target. |
+| **☢ Nuke** | Right-click → *Drop a nuke here* (or HQ → *Nuke*, per screen). An air-raid siren wails, a laser marks ground zero, and the bomb whistles down onto the floor of that screen. Then a white flash, a ground-burst fireball that climbs into a mushroom cloud with a condensation ring, and a shockwave that sweeps the **whole screen** — every enemy on it is destroyed — and rolls on into your other screens. Iron Man (and the Legion) race to the far side of another screen; when the wave catches them they're **thrown** through the air, tumble, crash and get back up. |
+| **⚔ Army attack** | Right-click → *Army attack…* (or HQ → *Army attack*): choose where they come from (left, right, the sky or both sides) and how many: 10, 20, 35, 50, or the **epic** battles — **200** and **1000 (legendary)**. Heavy mechs march in with the later waves. A banner tracks how many are left. |
+| **🦾 Iron Legion** | When an army arrives Iron Man calls in other suits — 2 for a small army, up to **7** for a big one — each in its own colors with a callsign (MK-XVII, MK-XL…). They fly in, take their own positions and fight alongside him; in an epic battle a destroyed suit is replaced. When the army is beaten they salute and fly home. You can also *Call / Dismiss the Legion* from the Suit menu. |
 | **Power & armor** | Flying and weapons drain the arc reactor, standing on the floor recharges it, missiles reload over time. At zero armor the suit goes **offline**, falls and **reboots**. Menu → *Suit* → repair / recharge. |
-| **More** | Patrols, fly-bys, area scans, **diagnostics** (your real CPU, memory, battery, uptime in a HUD card), thumbs-up, four suit colors, random invasions (off by default), difficulty, stand-by mode. Drag him and let go — his thrusters catch him. |
+| **More** | Patrols, fly-bys, area scans, **diagnostics** (your real CPU, memory, battery, uptime in a HUD card), thumbs-up, eight suit colors, random invasions (off by default), difficulty, stand-by mode. Drag him and let go — his thrusters catch him. |
 | **HUD look** | His menu and the home window ("HQ") switch to a holographic HUD theme. |
 
 ## ⏰ Reminders
@@ -114,13 +117,13 @@ src/main/main.js       Electron main: overlays per display, click-through, tray,
                        character switching, reminders, saving (+ import from "Desktop Cat")
 src/main/world.js      Cat simulation: needs, generator "tasks" brain, entities, tools
 src/main/ironman.js    Hero simulation: flight physics, floor per screen, enemy AI,
-                       projectiles, beams, damage, power, reboot
+                       projectiles, beams, damage, power, reboot, nuke, armies, Iron Legion
 src/main/reminders.js  Reminder scheduling (once / daily / weekdays / weekends, snooze)
 src/main/geometry.js   Multi-monitor union, clamping, routing across screen edges
 src/main/sysinfo.js    CPU / memory / uptime for the hero's diagnostics
 src/main/hook.js       Optional global mouse/keyboard hook (uiohook-napi, listen-only)
 src/renderer/catArt.js    Procedural cat: skeleton, 27 blended poses, faces
-src/renderer/ironArt.js   Procedural armored hero (20 poses, 2-bone IK), enemies, beams, explosions
+src/renderer/ironArt.js   Procedural armored hero (21 poses, 2-bone IK), enemies, beams, explosions, nuke
 src/renderer/overlay.js   Draws the world as depth-sorted sprites; briefing & diagnostics panels
 src/renderer/ironScene.js Hero / enemy / projectile rendering
 src/renderer/menu.js      Right-click menu for each character
@@ -130,7 +133,8 @@ src/home/                 Home window (Cat Home / HQ), reminders editor
 
 ### Developing
 
-- `npm test` — headless cat, multi-monitor and hero/combat/reminder tests.
+- `npm test` — headless cat, multi-monitor and hero/combat/army/nuke/reminder tests
+  (including a full 1000-unit battle).
 - `dev/gallery.html` — every pose, face, prop, hero pose and enemy (serve the folder,
   e.g. `python3 -m http.server`, then open `/dev/gallery.html?mode=iron`).
 - `npm run dev` with `CAT_CMD_FILE=/tmp/cmd.txt` drives the app from a file

@@ -15,6 +15,8 @@
   const menuRoot = document.getElementById('menu-root');
 
   let B = { x: 0, y: 0, width: window.innerWidth, height: window.innerHeight };
+  let W = null; // this display's work area
+  let DID = null; // this display's id
   let snaps = [];
   let latest = null;
   let soundCfg = '';
@@ -23,6 +25,8 @@
 
   api.on('init', (d) => {
     B = d.bounds;
+    W = d.workArea || null;
+    DID = d.id;
     document.body.dataset.platform = d.platform;
   });
   let lastEnts = null, lastStateAt = 0, scene = 'cat', iron = null;
@@ -47,7 +51,7 @@
 
   // ---------------------------------------------------------------- input
   const G = (e) => ({ x: B.x + e.clientX, y: B.y + e.clientY });
-  const onPanel = (t) => !!(t && t.closest && t.closest('.brief'));
+  const onPanel = (t) => !!(t && t.closest && (t.closest('.brief') || t.closest('.banner')));
   window.addEventListener('pointerdown', (e) => {
     if (CatMenu.contains(e.target) || onPanel(e.target)) return;
     if (CatMenu.isOpen()) { CatMenu.close(); return; }
@@ -573,7 +577,10 @@
   }
 
   function ensureFx() {
-    const d = window.devicePixelRatio || 1;
+    // big battles and the nuke fill the whole screen with soft effects every frame:
+    // draw them at 1× so a Retina screen has a quarter of the pixels to push
+    const heavy = scene === 'ironman' && latest && (latest.army || latest.nuke);
+    const d = heavy ? 1 : window.devicePixelRatio || 1;
     if (!fxCanvas) {
       fxCanvas = document.createElement('canvas');
       fxCanvas.className = 'fx';
@@ -657,9 +664,144 @@
     scene = ch;
     snaps = [];
     if (ch === 'ironman' && !iron) {
-      iron = IronScene.create({ Sprite, inB, spawn: spawnParticles, snaps: () => snaps, latest: () => latest });
+      iron = IronScene.create({ Sprite, inB, spawn: spawnParticles, snaps: () => snaps, latest: () => latest, bounds: () => B, work: () => W, shake: applyShake });
     }
     document.body.dataset.character = ch;
+  }
+
+  // ---------------------------------------------------------------- shake (nuke shockwave)
+  let shaking = false;
+  function applyShake(px) {
+    if (px > 0.3) {
+      const dx = (Math.random() - 0.5) * 2 * px, dy = (Math.random() - 0.5) * 2 * px;
+      const tr = `translate3d(${dx.toFixed(1)}px,${dy.toFixed(1)}px,0)`;
+      stage.style.transform = tr;
+      if (fxCanvas) fxCanvas.style.transform = tr;
+      shaking = true;
+    } else if (shaking) {
+      stage.style.transform = '';
+      if (fxCanvas) fxCanvas.style.transform = '';
+      shaking = false;
+    }
+  }
+
+  // ---------------------------------------------------------------- nuke countdown + army battle bar
+  const banner = { el: document.createElement('div'), key: '' };
+  banner.el.className = 'banner';
+  banner.el.style.display = 'none';
+  document.body.appendChild(banner.el);
+
+  function renderBanner() {
+    const s = latest;
+    let html = null, kind = '';
+    if (scene === 'ironman' && iron) {
+      const n = s.nuke;
+      if (n && !n.detonated && inB(n)) {
+        const left = Math.max(0, Math.ceil((n.det - Date.now()) / 1000));
+        kind = 'nuke';
+        html = ['☢ NUCLEAR STRIKE INBOUND', `T-MINUS ${left}`, 'ALL UNITS EVACUATE THIS SCREEN'];
+      } else if (s.army) {
+        const a = s.army;
+        if (String(a.did) === String(DID)) {
+          kind = 'army';
+          const done = Math.max(0, a.total - a.left);
+          const title = a.total >= 1000 ? 'LEGENDARY BATTLE' : a.total >= 200 ? 'EPIC BATTLE' : 'HOSTILE ARMY';
+          html = [`⚔ ${title} · ${a.left} LEFT`, `${done} / ${a.total} DESTROYED`, `IRON LEGION ×${a.legion}`, done / Math.max(1, a.total)];
+        }
+      }
+    }
+    if (!html) { if (banner.el.style.display !== 'none') { banner.el.style.display = 'none'; banner.key = ''; } return; }
+    const key = kind + JSON.stringify(html);
+    if (key !== banner.key) {
+      banner.key = key;
+      banner.el.dataset.kind = kind;
+      banner.el.innerHTML = '';
+      banner.el.appendChild(txt('div', 'b1', html[0]));
+      const row = txt('div', 'b2');
+      row.appendChild(txt('span', '', html[1]));
+      if (html[2]) row.appendChild(txt('span', '', html[2]));
+      banner.el.appendChild(row);
+      if (typeof html[3] === 'number') {
+        const bar = txt('div', 'bbar');
+        const f = txt('div', 'bfill');
+        f.style.width = Math.round(html[3] * 100) + '%';
+        bar.appendChild(f);
+        banner.el.appendChild(bar);
+      }
+    }
+    banner.el.style.display = '';
+    const w = banner.el.offsetWidth;
+    const top = W ? W.y - B.y + 16 : 16;
+    let left = (B.width - w) / 2;
+    // keep the countdown out of the falling bomb's way
+    if (kind === 'nuke') {
+      const gx = s.nuke.x - B.x;
+      if (gx > left - 70 && gx < left + w + 70) left = gx > B.width / 2 ? Math.max(16, gx - w - 110) : Math.min(B.width - w - 16, gx + 110);
+    }
+    banner.el.style.transform = `translate3d(${Math.round(left)}px,${Math.round(top)}px,0)`;
+  }
+
+  // ---------------------------------------------------------------- army launch dialog (from the menu)
+  const dialog = { el: document.createElement('div'), open: false, at: null, side: 'right', size: 'medium', openedAt: 0 };
+  dialog.el.className = 'brief armydlg';
+  dialog.el.dataset.character = 'ironman';
+  dialog.el.style.display = 'none';
+  document.body.appendChild(dialog.el);
+
+  function openArmyDialog(origin) {
+    dialog.open = true; dialog.at = origin; dialog.openedAt = Date.now();
+    buildDialog();
+    dialog.el.style.display = '';
+    const w = dialog.el.offsetWidth, h = dialog.el.offsetHeight;
+    const lx = clamp(origin.x - B.x - w / 2, 10, B.width - w - 10), ly = clamp(origin.y - B.y - h / 2, 10, B.height - h - 10);
+    dialog.el.style.transform = `translate3d(${Math.round(lx)}px,${Math.round(ly)}px,0)`;
+    reportHud();
+  }
+  function closeArmyDialog() { dialog.open = false; dialog.el.style.display = 'none'; reportHud(); }
+  function buildDialog() {
+    const el = dialog.el;
+    el.innerHTML = '';
+    el.appendChild(txt('div', 'brief-head', 'ARMY ATTACK'));
+    el.appendChild(txt('div', 'brief-time', 'CHOOSE WHERE THEY COME FROM AND HOW MANY'));
+    const group = (label, opts, key) => {
+      el.appendChild(txt('div', 'dlg-label', label));
+      const row = txt('div', 'dlg-row');
+      for (const [v, l] of opts) {
+        const b = txt('button', dialog[key] === v ? 'on' : '', l);
+        b.addEventListener('click', (e) => { e.stopPropagation(); dialog[key] = v; buildDialog(); });
+        row.appendChild(b);
+      }
+      el.appendChild(row);
+    };
+    group('FROM', [['left', '◀ LEFT'], ['right', 'RIGHT ▶'], ['top', '▲ SKY'], ['both', '◀▶ BOTH']], 'side');
+    group('SIZE', [['small', '10'], ['medium', '20'], ['large', '35'], ['massive', '50']], 'size');
+    group('EPIC BATTLES', [['epic', '200 · EPIC'], ['legendary', '1000 · LEGENDARY']], 'size');
+    const legion = { small: 2, medium: 3, large: 5 }[dialog.size] || 7;
+    el.appendChild(txt('div', 'brief-quip', dialog.size === 'legendary'
+      ? 'All 7 suits of the Iron Legion join the fight, and replacements fly in when one goes down. About 4 minutes of war.'
+      : dialog.size === 'epic' ? 'All 7 suits of the Iron Legion join the fight. Heavy mechs in every wave.'
+        : `Iron Man will call ${legion} more suits from the Iron Legion.`));
+    const row = txt('div', 'brief-btns');
+    const go = txt('button', 'primary', 'LAUNCH ATTACK');
+    go.addEventListener('click', (e) => { e.stopPropagation(); api.send('cmd', { name: 'army', args: { side: dialog.side, size: dialog.size, x: dialog.at.x, y: dialog.at.y } }); closeArmyDialog(); });
+    const cancel = txt('button', '', 'CANCEL');
+    cancel.addEventListener('click', (e) => { e.stopPropagation(); closeArmyDialog(); });
+    row.appendChild(go); row.appendChild(cancel);
+    el.appendChild(row);
+  }
+  CatMenu.onLocal = (name, origin) => { if (name === 'army') openArmyDialog(origin); };
+
+  // all clickable overlay panels report their rectangles to main (so only they catch the mouse)
+  let hudKey = '';
+  function reportHud() {
+    const rects = [];
+    for (const el of [panel.el, dialog.el]) {
+      if (el.style.display === 'none') continue;
+      const r = el.getBoundingClientRect();
+      rects.push({ x: B.x + r.left, y: B.y + r.top, w: r.width, h: r.height });
+    }
+    const key = JSON.stringify(rects.map((r) => [Math.round(r.x), Math.round(r.y), Math.round(r.w), Math.round(r.h)]));
+    if (key !== hudKey) { hudKey = key; api.send('hud', { rects }); }
   }
 
   // ---------------------------------------------------------------- reminder briefing + diagnostics panels
@@ -719,8 +861,7 @@
           const w = el.offsetWidth, h = el.offsetHeight;
           const lx = clamp(ax - B.x - w / 2, 10, B.width - w - 10), ly = clamp(ay - B.y - h, 10, B.height - h - 10);
           el.style.transform = `translate3d(${Math.round(lx)}px,${Math.round(ly)}px,0)`;
-          const key = `${Math.round(lx)},${Math.round(ly)},${w},${h}`;
-          if (key !== panel.rectKey) { panel.rectKey = key; api.send('hud', { rects: [{ x: B.x + lx, y: B.y + ly, w, h }] }); }
+          reportHud();
           if (panel.spokeFor !== panel.id) {
             panel.spokeFor = panel.id;
             CatSound.play(scene === 'ironman' ? 'alert' : 'reminder');
@@ -731,9 +872,10 @@
     }
     if (!show && panel.el.style.display !== 'none') {
       panel.el.style.display = 'none';
-      panel.rectKey = '';
-      api.send('hud', { rects: [] });
+      reportHud();
     }
+    if (dialog.open && (scene !== 'ironman' || Date.now() - dialog.openedAt > 60000)) closeArmyDialog();
+    renderBanner();
     // hero diagnostics card, follows the hero
     let dshow = false;
     if (scene === 'ironman' && s.diag && s.hero) {
@@ -770,7 +912,7 @@
   const MOVING = new Set(['walk', 'run', 'pounce', 'fall', 'held', 'scratchFront', 'cover', 'shake', 'dizzy', 'groom', 'roll', 'standUp']);
   function busyHere() {
     const s = latest;
-    if (panel.el.style.display !== 'none' || diag.el.style.display !== 'none') return true;
+    if (panel.el.style.display !== 'none' || diag.el.style.display !== 'none' || dialog.open || banner.el.style.display !== 'none') return true;
     if (scene === 'ironman') return particles.some((p) => inB(p, 60)) || iron.busyHere(s);
     const c = s.cat, S = s.s;
     if (inB({ x: c.x, y: c.y - c.z }, 160 * S)) return true;

@@ -21,9 +21,9 @@
     ['✨', 'Clean all', 'cleanAll'], ['🧴', 'Fix all', 'fixAll'], ['🗂️', 'Tidy files', 'tidyFiles'], ['👋', 'Call', 'call'],
   ];
   const ENEMIES = [['🛸', 'Drone', 'drone'], ['🤖', 'Walker', 'walker'], ['🛞', 'Tank', 'tank'], ['🐝', 'Swarm', 'swarm'], ['👾', 'Boss', 'boss'], ['🧹', 'Clear', null]];
-  const IRONQ = [['🔄', 'Patrol', 'patrol'], ['💨', 'Fly-by', 'flyby'], ['📡', 'Scan', 'scan'], ['🖥️', 'Diagnostics', 'diagnostics'], ['🛠️', 'Repair', 'repair'], ['⚡', 'Recharge', 'recharge'], ['👍', 'Thumbs up', 'thumbsUp'], ['🛫', 'Take off', 'takeoff']];
+  const IRONQ = [['🔄', 'Patrol', 'patrol'], ['💨', 'Fly-by', 'flyby'], ['📡', 'Scan', 'scan'], ['🖥️', 'Diagnostics', 'diagnostics'], ['🛠️', 'Repair', 'repair'], ['⚡', 'Recharge', 'recharge'], ['🦾', 'Call Legion', 'callLegion', { count: 3 }], ['👋', 'Dismiss Legion', 'dismissLegion']];
   const STATS = [['meals', 'meals eaten'], ['treats', 'treats'], ['pets', 'pets'], ['poopsCleaned', 'poops scooped'], ['scratchesFixed', 'scratches fixed'], ['filesTidied', 'files tidied'], ['miceCaught', 'mice caught'], ['laserPounces', 'laser pounces'], ['naps', 'naps']];
-  const ISTATS = [['kills', 'threats down'], ['drones', 'drones'], ['walkers', 'walkers'], ['tanks', 'tanks'], ['bosses', 'heavy mechs'], ['waves', 'waves cleared'], ['shotsFired', 'repulsor shots'], ['missiles', 'missiles fired'], ['reboots', 'suit reboots']];
+  const ISTATS = [['kills', 'threats down'], ['drones', 'drones'], ['walkers', 'walkers'], ['tanks', 'tanks'], ['bosses', 'heavy mechs'], ['armiesWon', 'armies beaten'], ['nukes', 'nukes dropped'], ['legion', 'legion suits called'], ['waves', 'waves cleared'], ['shotsFired', 'repulsor shots'], ['missiles', 'missiles fired'], ['reboots', 'suit reboots']];
   const FUR = { white: '#ffffff', cream: '#f6e3c6', silver: '#c9cdd8', ginger: '#f5a65b', black: '#34353f' };
   const EYES = { blue: '#6cb6ff', green: '#8bd06a', amber: '#f3b443', odd: 'linear-gradient(90deg,#6cb6ff 50%,#f3b443 50%)' };
   const SUITS = { classic: 'linear-gradient(135deg,#c41f2a 55%,#f2b134 55%)', stealth: 'linear-gradient(135deg,#343843 55%,#9aa3b3 55%)', silver: 'linear-gradient(135deg,#b8bfca 55%,#e1e5eb 55%)', patriot: 'linear-gradient(135deg,#26408f 55%,#ffffff 55%)' };
@@ -76,6 +76,34 @@
     $('#ironEnemies').appendChild(b);
   }
   stats($('#stats'), STATS);
+  const LEGION = { small: 2, medium: 3, large: 5, massive: 7, epic: 7, legendary: 7 };
+  const armyNote = () => {
+    const v = $('#armySize').value;
+    $('#armyNote').textContent = v === 'legendary' ? 'All 7 Iron Legion suits join, with replacements when one goes down. About 4 minutes of war.'
+      : `Iron Man will call ${LEGION[v]} more suits from the Iron Legion.`;
+  };
+  $('#armySize').addEventListener('change', armyNote);
+  armyNote();
+  $('#armyGo').addEventListener('click', () => cmd('army', { side: $('#armySide').value, size: $('#armySize').value, display: $('#armyScreen').value }));
+  let screensKey = '';
+  function renderScreens(list) {
+    const key = JSON.stringify(list);
+    if (key === screensKey) return;
+    screensKey = key;
+    const sel = $('#armyScreen');
+    const prev = sel.value;
+    sel.innerHTML = '';
+    for (const d of list) sel.add(new Option(d.label, d.id));
+    if (prev) sel.value = prev;
+    const box = $('#nukeBtns');
+    box.innerHTML = '';
+    for (const d of list) {
+      const b = el('button', 'qa nukebtn');
+      b.append(el('span', 'e', '☢️'), el('span', '', d.label));
+      b.addEventListener('click', () => cmd('nuke', { display: d.id }));
+      box.appendChild(b);
+    }
+  }
   stats($('#ironStats'), ISTATS);
   swatches($('#fur'), FUR, 'palette');
   swatches($('#eyes'), EYES, 'eyes', (k) => (k === 'odd' ? 'odd-eyed' : k));
@@ -217,6 +245,10 @@
       $('#mood').textContent = h.status;
       setBars($('#suitBars'), { power: h.power, armor: h.armor, missiles: (h.missiles / 12) * 100 });
       for (const d of $('#ironStats').children) d.querySelector('b').textContent = (s.counters[d.dataset.k] || 0).toLocaleString();
+      renderScreens(s.displays || []);
+      $('#armyGo').disabled = !!s.army;
+      $('#armyGo').textContent = s.army ? 'Battle in progress…' : 'Launch';
+      $$('.nukebtn').forEach((b) => { b.disabled = !!s.nuke; });
       $$('#suits .sw').forEach((b) => b.classList.toggle('on', b.dataset.v === s.settings.suit));
     } else if (s.cat) {
       const c = s.cat;

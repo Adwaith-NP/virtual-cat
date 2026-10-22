@@ -43,6 +43,16 @@
     <div id="suitBars" class="needs"></div>
     <h3>Deploy enemies</h3>
     <div class="grid" id="ironEnemies"></div>
+    <h3>Army attack</h3>
+    <div class="card pad army">
+      <label>From <select id="armySide"><option value="left">◀ Left</option><option value="right" selected>Right ▶</option><option value="top">▲ Sky</option><option value="both">◀▶ Both sides</option></select></label>
+      <label>Size <select id="armySize"><option value="small">10 units</option><option value="medium" selected>20 units</option><option value="large">35 units</option><option value="massive">50 units</option><option value="epic">200 · epic</option><option value="legendary">1000 · legendary</option></select></label>
+      <label>Screen <select id="armyScreen"></select></label>
+      <button id="armyGo" class="btn small">Launch</button>
+      <p class="muted small" id="armyNote"></p>
+    </div>
+    <h3>Nuke</h3>
+    <div class="grid" id="nukeBtns"></div>
     <h3>Commands</h3>
     <div class="grid" id="ironQuick"></div>
     <h3>Combat record</h3>
@@ -145,6 +155,10 @@
       <p>Flying and weapons drain the arc reactor; standing on the ground recharges it. Missiles reload slowly. If armor hits zero the suit goes offline, falls, and reboots.</p>
       <h4>🛫 Flight</h4>
       <p>He lives on the floor of your screens — to go anywhere higher he has to fly. Drag him and let go: his thrusters catch him.</p>
+      <h4>⚔ Army attack &amp; the Iron Legion</h4>
+      <p>Pick a side and a size — up to a legendary 1000 attackers. Iron Man calls in up to 7 Iron Legion suits to fight with him; in epic battles a destroyed suit is replaced.</p>
+      <h4>☢ Nuke</h4>
+      <p>Siren, a falling bomb, then a mushroom cloud and a shockwave that wipes out every enemy on that screen. Iron Man runs for another screen — if the wave catches him, he goes flying.</p>
     </div>
     <div class="card pad">
       <h4>⏰ Reminders</h4>

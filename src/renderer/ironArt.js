@@ -28,6 +28,10 @@
     stealth: { label: 'Stealth', red: ['#5b6170', '#343843', '#17191f'], gold: ['#d9dee8', '#9aa3b3', '#5f6778'], line: '#06070a', dark: '#14161b', glow: '#ffffff', halo: '170,200,255' },
     silver: { label: 'Silver prototype', red: ['#f2f4f7', '#b8bfca', '#717a88'], gold: ['#e1e5eb', '#a6aebb', '#68717f'], line: '#262a31', dark: '#3d424b', glow: '#e9fbff', halo: '120,220,255' },
     patriot: { label: 'Patriot', red: ['#4a6fd0', '#26408f', '#142355'], gold: ['#ffffff', '#d4d9e2', '#8d95a5'], line: '#0a1230', dark: '#7a1420', glow: '#ffffff', halo: '160,200,255' },
+    gold: { label: 'Gold', red: ['#ffe08a', '#e0a22a', '#8f5f0a'], gold: ['#fff4c4', '#f2d06a', '#b08a26'], line: '#3a2604', dark: '#4a3008', glow: '#fffbe0', halo: '255,220,140' },
+    midnight: { label: 'Midnight', red: ['#3b3e48', '#1d1f26', '#0b0c10'], gold: ['#ff5a5a', '#c41f2a', '#6e0d14'], line: '#000000', dark: '#120406', glow: '#ffd0d0', halo: '255,90,90' },
+    arctic: { label: 'Arctic', red: ['#ffffff', '#d7e6f5', '#8fa9c4'], gold: ['#8fd8ff', '#3fa7e0', '#1b6a99'], line: '#1d3550', dark: '#2b4a6b', glow: '#e8fbff', halo: '120,220,255' },
+    gunmetal: { label: 'Gunmetal', red: ['#8a929e', '#5b636f', '#30353d'], gold: ['#c7ccd4', '#8e95a0', '#545b66'], line: '#111418', dark: '#22262c', glow: '#ffffff', halo: '170,210,255' },
   };
 
   // ------------------------------------------------------------------ poses
@@ -238,6 +242,21 @@
     p.arms[0].hand = lp(P(-11.5, -49), P(6, -88), k);
     p.arms[0].open = 1; p.arms[0].handAng = -0.4;
     p.turn = 0.55;
+    return p;
+  };
+
+  POSES.brace = (c) => {
+    // crouched, arms crossed in front of the faceplate
+    const p = base(c.T);
+    p.hip.y = -35;
+    p.lean = 0.18;
+    p.legs[0].foot = P(-11, -4); p.legs[1].foot = P(9, -4);
+    p.arms[0].hand = P(8, -74); p.arms[1].hand = P(4, -78);
+    p.arms[0].bend = -1; p.arms[1].bend = 1;
+    p.arms[0].handAng = p.arms[1].handAng = -PI / 2;
+    p.headTilt = 0.3;
+    p.reactor = 0.9;
+    p.thrust.feet = 0.15 * (0.5 + 0.5 * sin(c.T * 30));
     return p;
   };
 
@@ -892,6 +911,16 @@
       glow(ctx, 0, 0, (2 + 4 * p.k) * p.size, p.color || '120,220,255', 0.5 * (1 - p.k));
       ctx.globalCompositeOperation = 'source-over';
     },
+    ash(ctx, p) {
+      ctx.rotate(p.rot);
+      ctx.fillStyle = `rgba(70,66,64,${0.7 * (1 - p.k * 0.6)})`;
+      ctx.fillRect(-1.6 * p.size, -0.9 * p.size, 3.2 * p.size, 1.8 * p.size);
+    },
+    ember(ctx, p) {
+      ctx.globalCompositeOperation = 'lighter';
+      glow(ctx, 0, 0, 3.5 * p.size, '255,150,60', 1 - p.k);
+      ctx.globalCompositeOperation = 'source-over';
+    },
     portal(ctx, p) {
       ctx.globalCompositeOperation = 'lighter';
       ctx.strokeStyle = `rgba(255,60,80,${1 - p.k})`;
@@ -902,6 +931,281 @@
       ctx.globalCompositeOperation = 'source-over';
     },
   };
+
+  // ------------------------------------------------------------------ nuke
+  // deterministic wobble for cloud edges
+  const nz = (i, t) => sin(i * 12.9898 + t * 1.3) * 0.5 + sin(i * 4.1 + t * 0.7) * 0.5;
+
+  function drawBomb(ctx, x, y, T) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(0.05 * sin(T * 6));
+    // fins
+    ctx.fillStyle = '#3c4250';
+    ctx.beginPath(); ctx.moveTo(-9, -40); ctx.lineTo(-16, -56); ctx.lineTo(16, -56); ctx.lineTo(9, -40); ctx.closePath(); ctx.fill();
+    ctx.fillRect(-1.5, -58, 3, 20);
+    // body
+    const g = ctx.createLinearGradient(-12, 0, 12, 0);
+    g.addColorStop(0, '#5b6272'); g.addColorStop(0.45, '#c9ced8'); g.addColorStop(1, '#4b5160');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.ellipse(0, -18, 12, 26, 0, 0, TAU); ctx.fill();
+    ctx.lineWidth = 1.2; ctx.strokeStyle = '#1d2028'; ctx.stroke();
+    // yellow band + trefoil
+    ctx.fillStyle = '#ffcc1a'; ctx.fillRect(-11.5, -24, 23, 9);
+    ctx.fillStyle = '#1d1d1d';
+    for (let i = 0; i < 3; i++) {
+      const a = -PI / 2 + i * TAU / 3;
+      ctx.beginPath(); ctx.moveTo(0, -19.5); ctx.arc(0, -19.5, 4.2, a - 0.5, a + 0.5); ctx.closePath(); ctx.fill();
+    }
+    ctx.beginPath(); ctx.arc(0, -19.5, 1.1, 0, TAU); ctx.fill();
+    ctx.restore();
+  }
+
+  function trefoil(ctx, x, y, r, a) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.globalAlpha *= a;
+    ctx.fillStyle = '#ffcc1a';
+    ctx.beginPath(); ctx.arc(0, 0, r, 0, TAU); ctx.fill();
+    ctx.fillStyle = '#1a1a1a';
+    for (let i = 0; i < 3; i++) {
+      const b = -PI / 2 + i * TAU / 3;
+      ctx.beginPath(); ctx.moveTo(0, 0); ctx.arc(0, 0, r * 0.82, b - 0.52, b + 0.52); ctx.closePath(); ctx.fill();
+    }
+    ctx.fillStyle = '#ffcc1a'; ctx.beginPath(); ctx.arc(0, 0, r * 0.22, 0, TAU); ctx.fill();
+    ctx.fillStyle = '#1a1a1a'; ctx.beginPath(); ctx.arc(0, 0, r * 0.13, 0, TAU); ctx.fill();
+    ctx.restore();
+  }
+
+  // Ground-zero marker during the countdown: a laser designator from the sky
+  // and pulsing rings painted on the floor. topY = top of the screen.
+  function drawNukeTarget(ctx, x, y, T, k, topY) {
+    ctx.save();
+    const pulse = 0.5 + 0.5 * sin(T * 10);
+    if (topY != null) {
+      const g = ctx.createLinearGradient(0, topY, 0, y);
+      g.addColorStop(0, 'rgba(255,40,40,0)');
+      g.addColorStop(1, `rgba(255,40,40,${0.35 + 0.35 * pulse})`);
+      ctx.fillStyle = g;
+      ctx.fillRect(x - 1.5, topY, 3, y - topY);
+      ctx.fillStyle = `rgba(255,60,60,${0.08 + 0.08 * pulse})`;
+      ctx.fillRect(x - 7, topY, 14, y - topY);
+    }
+    ctx.strokeStyle = `rgba(255,40,40,${0.55 + 0.4 * pulse})`;
+    ctx.lineWidth = 2.5;
+    for (let i = 0; i < 3; i++) {
+      const rx = 40 + i * 34 + 10 * pulse;
+      ctx.beginPath(); ctx.ellipse(x, y, rx, rx * 0.28, 0, 0, TAU); ctx.stroke();
+    }
+    ctx.beginPath();
+    ctx.moveTo(x - 160, y); ctx.lineTo(x - 30, y); ctx.moveTo(x + 30, y); ctx.lineTo(x + 160, y);
+    ctx.stroke();
+    // hot spot where the laser touches the floor
+    const hg = ctx.createRadialGradient(x, y, 0, x, y, 22);
+    hg.addColorStop(0, `rgba(255,220,220,${0.8 + 0.2 * pulse})`);
+    hg.addColorStop(0.4, 'rgba(255,40,40,0.6)');
+    hg.addColorStop(1, 'rgba(255,40,40,0)');
+    ctx.fillStyle = hg;
+    ctx.beginPath(); ctx.ellipse(x, y, 22, 10, 0, 0, TAU); ctx.fill();
+    trefoil(ctx, x, y - 74 - 6 * pulse, 18, 0.95);
+    ctx.restore();
+  }
+
+  // A soft elliptical glow: the gradient is squashed with the shape, so no hard rim.
+  function softEllipse(ctx, x, y, rx, ry, stops) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(1, ry / rx);
+    const g = ctx.createRadialGradient(0, 0, 0, 0, 0, rx);
+    for (const [k, c] of stops) g.addColorStop(k, c);
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(0, 0, rx, 0, TAU); ctx.fill();
+    ctx.restore();
+  }
+
+  // Ground-burst fireball → mushroom cloud. (x, y) = ground zero on the floor,
+  // t = seconds since detonation, R = cap radius scale, H = how high the cap climbs.
+  function drawMushroom(ctx, x, y, t, R, H) {
+    H = H || R * 1.6;
+    const fade = t < 10 ? 1 : clamp(1 - (t - 10) / 6, 0, 1);
+    if (fade <= 0) return;
+    ctx.save();
+    ctx.globalAlpha = fade;
+    const rise = Math.min(1, t / 6);
+    const ease = 1 - Math.pow(1 - rise, 2.2);
+    const capY = y - R * 0.35 - ease * (H - R * 0.35);
+    const grow = Math.min(1, t / 0.8);
+    const capR = R * (0.5 + 0.6 * grow + 0.3 * rise) * (1 + 0.035 * Math.max(0, t - 6));
+    const heat = clamp(1 - t / 6.5, 0, 1);
+    const smoke = (al) => `rgba(${120 + 130 * heat | 0},${108 + 82 * heat | 0},${100 - 10 * heat | 0},${al})`;
+    // condensation ring (back half, behind the stem)
+    const ringK = clamp((t - 1) / 4, 0, 1);
+    const ringA = t > 1 && t < 6.5 ? Math.sin(ringK * PI) * 0.55 : 0;
+    const ringY = lerp(y, capY, 0.5), ringRx = capR * (0.7 + 0.6 * ringK), ringRy = ringRx * 0.14;
+    // stem: a tapered column with rolling blobs climbing up it
+    if (t > 0.45) {
+      const sw = R * (0.15 + 0.1 * rise);
+      const top = capY + capR * 0.25;
+      const g = ctx.createLinearGradient(0, top, 0, y);
+      g.addColorStop(0, smoke(0.85));
+      g.addColorStop(0.7, `rgba(${110 + 120 * heat | 0},${90 + 60 * heat | 0},${70},0.75)`);
+      g.addColorStop(1, `rgba(${150 + 105 * heat | 0},${110 + 80 * heat | 0},${70 + 40 * heat | 0},0.85)`);
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.moveTo(x - sw * 0.7, top);
+      ctx.bezierCurveTo(x - sw * 0.55, (top + y) / 2, x - sw * 1.3, y - R * 0.12, x - sw * 2.4, y);
+      ctx.lineTo(x + sw * 2.4, y);
+      ctx.bezierCurveTo(x + sw * 1.3, y - R * 0.12, x + sw * 0.55, (top + y) / 2, x + sw * 0.7, top);
+      ctx.closePath();
+      ctx.fill();
+      for (let j = 0; j < 9; j++) {
+        const ph = (j / 9 + t * 0.22) % 1;
+        const py = lerp(y - R * 0.15, top + capR * 0.1, ph);
+        const px = x + nz(j, t) * sw * 0.25;
+        const br = sw * (1.25 - 0.5 * ph) * (1 + 0.15 * nz(j + 5, t));
+        const hot = heat * (1 - ph * 0.6);
+        const g2 = ctx.createRadialGradient(px - br * 0.25, py - br * 0.25, br * 0.1, px, py, br);
+        g2.addColorStop(0, `rgba(${150 + 105 * hot | 0},${110 + 90 * hot | 0},${85 + 40 * hot | 0},0.75)`);
+        g2.addColorStop(1, 'rgba(110,95,85,0)');
+        ctx.fillStyle = g2;
+        ctx.beginPath(); ctx.arc(px, py, br, 0, TAU); ctx.fill();
+      }
+    }
+    // base surge: dust rolling outward along the floor
+    if (t > 0.2) {
+      const spread = 0.5 + 1.6 * Math.min(1, t / 4);
+      for (let i = 0; i < 23; i++) {
+        const u = (i - 11) / 11;
+        const bx = x + u * R * 1.15 * spread + nz(i + 9, t) * R * 0.06;
+        const br = R * (0.24 + 0.08 * nz(i, t)) * (0.55 + 0.6 * Math.min(1, t / 4)) * (1 - Math.abs(u) * 0.55);
+        const by = y - br * (0.35 + 0.15 * nz(i + 4, t * 0.7));
+        const g2 = ctx.createRadialGradient(bx, by, br * 0.1, bx, by, br);
+        g2.addColorStop(0, `rgba(${125 + 90 * heat | 0},${105 + 55 * heat | 0},88,0.62)`);
+        g2.addColorStop(1, 'rgba(110,100,90,0)');
+        ctx.fillStyle = g2;
+        ctx.beginPath(); ctx.arc(bx, by, br, 0, TAU); ctx.fill();
+      }
+    }
+    // cap underside: the glowing toroid
+    softEllipse(ctx, x, capY + capR * 0.32, capR * 1.15, capR * 0.36, [
+      [0, `rgba(${200 + 55 * heat | 0},${90 + 90 * heat | 0},${40 + 40 * heat | 0},${0.55 + 0.35 * heat})`],
+      [1, 'rgba(90,60,50,0)']]);
+    // cap: a filled centre, then overlapping blobs rolling outward
+    for (let i = 0; i < 6; i++) {
+      const bx = x + (i - 2.5) * capR * 0.32, by = capY + nz(i + 3, t) * capR * 0.08 - capR * 0.05;
+      const br = capR * 0.5;
+      const g = ctx.createRadialGradient(bx, by - br * 0.2, br * 0.1, bx, by, br);
+      g.addColorStop(0, `rgba(${180 + 75 * heat | 0},${120 + 90 * heat | 0},${80 + 70 * heat | 0},0.9)`);
+      g.addColorStop(1, 'rgba(110,85,75,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(bx, by, br, 0, TAU); ctx.fill();
+    }
+    const blobs = 16;
+    for (let layer = 0; layer < 2; layer++) {
+      for (let i = 0; i < blobs; i++) {
+        const a = (i / blobs) * TAU + t * 0.25 * (layer ? -1 : 1);
+        const rr = capR * (0.62 + 0.12 * nz(i + layer * 7, t));
+        const bx = x + cos(a) * rr * 1.25;
+        const by = capY + sin(a) * rr * 0.55;
+        const br = capR * (0.38 + 0.08 * nz(i * 3, t));
+        const g = ctx.createRadialGradient(bx, by - br * 0.3, br * 0.1, bx, by, br);
+        if (layer === 0) {
+          g.addColorStop(0, `rgba(255,${200 + 50 * heat | 0},${120 + 120 * heat | 0},0.95)`);
+          g.addColorStop(0.5, `rgba(${170 + 60 * heat | 0},${90 + 80 * heat | 0},${50 + 10 * heat | 0},0.9)`);
+          g.addColorStop(1, 'rgba(110,80,60,0)');
+        } else {
+          g.addColorStop(0, smoke(0.85));
+          g.addColorStop(1, 'rgba(95,88,85,0)');
+        }
+        ctx.fillStyle = g;
+        ctx.beginPath(); ctx.arc(bx, by, br, 0, TAU); ctx.fill();
+      }
+    }
+    // cooled smoke darkens the crown
+    if (heat < 0.8) softEllipse(ctx, x, capY - capR * 0.2, capR * 1.2, capR * 0.62, [[0, `rgba(85,78,76,${0.45 * (1 - heat)})`], [0.6, `rgba(85,78,76,${0.25 * (1 - heat)})`], [1, 'rgba(85,78,76,0)']]);
+    // incandescent core
+    if (heat > 0) {
+      ctx.globalCompositeOperation = 'lighter';
+      const g = ctx.createRadialGradient(x, capY, 0, x, capY, capR * 1.1);
+      g.addColorStop(0, `rgba(255,255,230,${0.95 * heat})`);
+      g.addColorStop(0.35, `rgba(255,200,90,${0.7 * heat})`);
+      g.addColorStop(1, 'rgba(255,80,0,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(x, capY, capR * 1.1, 0, TAU); ctx.fill();
+      ctx.globalCompositeOperation = 'source-over';
+    }
+    // condensation ring (front half)
+    if (ringA > 0) {
+      ctx.lineWidth = ringRy * 0.8;
+      ctx.strokeStyle = `rgba(245,248,255,${ringA * 0.7})`;
+      ctx.beginPath(); ctx.ellipse(x, ringY, ringRx, ringRy, 0, 0, TAU); ctx.stroke();
+      ctx.lineWidth = ringRy * 0.25;
+      ctx.strokeStyle = `rgba(255,255,255,${ringA * 0.5})`;
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  // The expanding shockwave ring (plus condensation shell early on).
+  function drawShockwave(ctx, x, y, r, t) {
+    if (r <= 0) return;
+    ctx.save();
+    const a = clamp(1 - t / 4.5, 0.15, 1);
+    // condensation dome
+    if (t < 1.4) {
+      const k = t / 1.4;
+      const g = ctx.createRadialGradient(x, y, r * 0.75, x, y, r);
+      g.addColorStop(0, 'rgba(255,255,255,0)');
+      g.addColorStop(0.85, `rgba(235,240,255,${0.35 * (1 - k)})`);
+      g.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fill();
+    }
+    // the front: a bright ring with a heat-shimmer double
+    ctx.lineWidth = 14 * a + 4;
+    ctx.strokeStyle = `rgba(255,236,200,${0.5 * a})`;
+    ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.stroke();
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = `rgba(255,255,255,${0.85 * a})`;
+    ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.stroke();
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = `rgba(200,225,255,${0.4 * a})`;
+    ctx.beginPath(); ctx.arc(x, y, r * 0.96, 0, TAU); ctx.stroke();
+    ctx.restore();
+  }
+
+  // Dust surge rolling along a floor (one call per screen floor line).
+  function drawDustWall(ctx, x, floorY, r, t, left, right) {
+    const a = clamp(1 - t / 6, 0, 1);
+    if (a <= 0) return;
+    ctx.save();
+    for (const dir of [-1, 1]) {
+      const fx = x + dir * r;
+      if (fx < left - 200 || fx > right + 200) continue;
+      for (let i = 0; i < 7; i++) {
+        const bx = fx - dir * i * 26, h = (60 - i * 6) * (0.7 + 0.3 * nz(i, t));
+        const g = ctx.createRadialGradient(bx, floorY - h * 0.4, 2, bx, floorY - h * 0.4, h);
+        g.addColorStop(0, `rgba(160,140,120,${0.5 * a})`);
+        g.addColorStop(1, 'rgba(160,140,120,0)');
+        ctx.fillStyle = g;
+        ctx.beginPath(); ctx.arc(bx, floorY - h * 0.4, h, 0, TAU); ctx.fill();
+      }
+    }
+    ctx.restore();
+  }
+
+  // Charred, glowing strip on the floor around ground zero.
+  function drawScorch(ctx, x, y, R, a, t) {
+    if (a <= 0) return;
+    ctx.save();
+    softEllipse(ctx, x, y, R, Math.max(6, R * 0.06), [[0, `rgba(20,14,10,${0.7 * a})`], [0.6, `rgba(40,28,20,${0.3 * a})`], [1, 'rgba(40,28,20,0)']]);
+    const glow = t == null ? 0 : clamp(1 - t / 5, 0, 1);
+    if (glow > 0) {
+      ctx.globalCompositeOperation = 'lighter';
+      softEllipse(ctx, x, y, R * 0.7, Math.max(7, R * 0.09), [[0, `rgba(255,150,50,${0.7 * glow})`], [1, 'rgba(255,60,0,0)']]);
+    }
+    ctx.restore();
+  }
 
   // HUD callout text (cyan, monospace, bracketed)
   function hudText(ctx, text, x, y, a, color) {
@@ -946,5 +1250,6 @@
   root.IronArt = {
     SUITS, POSES, makeRig, lerpRig, drawHero, points, drawEnemy, ENEMIES,
     drawBeam, drawLaser, drawMissile, drawShell, FX, hudText, reticle, glow, drawBust,
+    drawBomb, drawNukeTarget, drawMushroom, drawShockwave, drawDustWall, drawScorch, trefoil,
   };
 })(typeof window !== 'undefined' ? window : globalThis);

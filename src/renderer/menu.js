@@ -41,6 +41,8 @@
         { icon: '🧹', label: n ? `Clear all enemies (${n})` : 'No enemies', cmd: 'clearEnemies', disabled: !n },
       ],
     });
+    out.push({ icon: '⚔️', label: 'Army attack…', local: 'army', hint: s.army ? 'battle in progress' : 'pick side & size', disabled: !!s.army });
+    out.push({ icon: '☢️', label: s.nuke ? 'Nuke in progress…' : 'Drop a nuke here', cmd: 'nuke', hint: s.nuke ? '' : 'this whole screen', disabled: !!s.nuke, danger: !s.nuke });
     out.push({
       icon: '💥', label: 'Attack here',
       sub: [
@@ -66,6 +68,7 @@
         { icon: '🛠️', label: `Repair armor (${Math.round(h.armor)}%)`, cmd: 'repair' },
         { icon: '⚡', label: `Recharge reactor (${Math.round(h.power)}%)`, cmd: 'recharge', hint: 'also reloads missiles' },
         { icon: '👍', label: 'Thumbs up', cmd: 'thumbsUp' },
+        { icon: '🦾', label: s.allies && s.allies.length ? `Dismiss the Legion (${s.allies.length})` : 'Call the Iron Legion', cmd: s.allies && s.allies.length ? 'dismissLegion' : 'callLegion', args: { count: 3 } },
         { icon: '🖥️', label: 'Run diagnostics', cmd: 'diagnostics', hint: 'CPU · memory · battery' },
         '-',
         ...[['classic', 'Classic red & gold'], ['stealth', 'Stealth'], ['silver', 'Silver prototype'], ['patriot', 'Patriot']].map(([k, l]) => ({ icon: '🎨', label: l, cmd: 'setting', args: { key: 'suit', value: k }, checked: s.suit === k })),
@@ -184,7 +187,9 @@
         row.addEventListener('click', (e) => {
           e.stopPropagation();
           if (it.disabled) return;
-          const args = Object.assign({}, it.args || {}, origin ? { x: origin.x, y: origin.y } : {});
+          const o = origin;
+          if (it.local) { close(); if (root.CatMenu.onLocal) root.CatMenu.onLocal(it.local, o); return; }
+          const args = Object.assign({}, it.args || {}, o ? { x: o.x, y: o.y } : {});
           api.send('cmd', { name: it.cmd, args });
           close();
         });

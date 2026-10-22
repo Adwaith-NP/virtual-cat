@@ -185,6 +185,59 @@
     spawn: () => { blip('sine', 900, 200, 0.3, 0.1); hiss('bandpass', 1200, 2, 0.25, 0.1); },
     bossSpawn: () => { blip('sawtooth', 90, 70, 1.1, 0.18); blip('sawtooth', 135, 100, 1.1, 0.12); },
     reminder: () => { [988, 1319, 1568].forEach((f, i) => blip('sine', f, f, 0.18, 0.12, i * 0.13)); },
+
+    // ---- nuke & army
+    siren: () => {
+      // classic air-raid wail: two slow rise-and-fall cycles
+      const c = ctx(); if (!c) return;
+      const t = c.currentTime + 0.02, dur = 5.0;
+      const out = gain(0);
+      out.gain.setValueAtTime(0.0001, t); out.gain.linearRampToValueAtTime(0.22, t + 0.6);
+      out.gain.setValueAtTime(0.22, t + dur - 0.6); out.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      const lp = filt('lowpass', 2200, 0.8);
+      lp.connect(out); out.connect(master);
+      const curvePts = [[0, 180], [1.3, 760], [1.9, 760], [2.6, 330], [3.6, 780], [4.2, 760], [5.0, 260]];
+      for (const [type, mul, vol] of [['sawtooth', 1, 0.5], ['square', 1.005, 0.25], ['sine', 2, 0.25]]) {
+        const o = c.createOscillator(); o.type = type;
+        curve(o.frequency, t, curvePts.map(([a, v]) => [a, v * mul]));
+        const g = gain(vol); o.connect(g); g.connect(lp);
+        o.start(t); o.stop(t + dur + 0.1);
+      }
+    },
+    bombWhistle: () => {
+      const c = ctx(); if (!c) return;
+      const t = c.currentTime + 0.01, dur = 1.9;
+      const o = c.createOscillator(); o.type = 'sine';
+      o.frequency.setValueAtTime(2600, t); o.frequency.exponentialRampToValueAtTime(420, t + dur);
+      const vib = c.createOscillator(); vib.frequency.value = 9; const vg = gain(25); vib.connect(vg); vg.connect(o.frequency);
+      const g = gain(0);
+      g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.2, t + dur * 0.8); g.gain.linearRampToValueAtTime(0.0001, t + dur);
+      o.connect(g); g.connect(master);
+      o.start(t); vib.start(t); o.stop(t + dur + 0.05); vib.stop(t + dur + 0.05);
+    },
+    nukeBoom: () => {
+      hiss('highpass', 900, 0.7, 0.3, 0.7);                       // the crack
+      hiss('lowpass', 180, 0.7, 4.6, 0.95);                       // the boom
+      blip('sine', 52, 20, 3.4, 0.85);                            // sub-bass punch
+      hiss('lowpass', 90, 0.6, 7, 0.6, 0.4);                       // long rumble
+      for (let i = 0; i < 9; i++) hiss('bandpass', 700 + Math.random() * 900, 1.2, 0.12, 0.18, 0.8 + i * 0.4 + Math.random() * 0.3); // crackles
+    },
+    shockHit: () => { hiss('bandpass', 220, 0.8, 0.5, 0.45, 0, 1600); blip('sine', 90, 35, 0.4, 0.5); },
+    warHorn: () => {
+      const c = ctx(); if (!c) return;
+      const t = c.currentTime + 0.02, dur = 2.2;
+      const out = gain(0);
+      out.gain.setValueAtTime(0.0001, t); out.gain.linearRampToValueAtTime(0.28, t + 0.35);
+      out.gain.setValueAtTime(0.28, t + dur - 0.5); out.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      const lp = filt('lowpass', 950, 1.2);
+      lp.connect(out); out.connect(master);
+      for (const f of [110, 165, 220]) {
+        const o = c.createOscillator(); o.type = 'sawtooth';
+        o.frequency.setValueAtTime(f * 0.94, t); o.frequency.linearRampToValueAtTime(f, t + 0.3);
+        const vib = c.createOscillator(); vib.frequency.value = 5; const vg = gain(f * 0.01); vib.connect(vg); vg.connect(o.frequency);
+        o.connect(lp); o.start(t); vib.start(t); o.stop(t + dur + 0.1); vib.stop(t + dur + 0.1);
+      }
+    },
   };
 
   // looping engine sounds (thrusters): level 0..1
